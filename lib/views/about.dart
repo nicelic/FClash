@@ -64,9 +64,7 @@ class AboutView extends ConsumerWidget {
         ListItem(
           title: Text(appLocalizations.core),
           onTap: () {
-            dialogs.openUrl(
-              'https://github.com/MetaCubeX/mihomo',
-            );
+            dialogs.openUrl('https://github.com/MetaCubeX/mihomo');
           },
           trailing: const Icon(Icons.launch),
         ),
