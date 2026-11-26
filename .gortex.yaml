@@ -1,0 +1,6 @@
+watch:
+  enabled: true
+  debounce_ms: 100
+search:
+  index_prose: true
+workspace: default

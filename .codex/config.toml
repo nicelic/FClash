@@ -1,0 +1,24 @@
+[[hooks.PostToolUse]]
+matcher = "apply_patch|Bash"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "bash tool/check_comment_density.sh"
+timeout = 15
+statusMessage = "Checking comment density"
+[mcp_servers.gortex]
+command = "C:\\EXEXX\\code-Manager-rust\\code-Manager-rust.exe"
+args = ["gortex-bridge", "--gortex", "C:\\EXEXX\\code-Manager-rust\\Gortex\\bin\\gortex.exe", "--agent", "codex", "--cwd", "E:\\aex\\Documents\\FlClash-0.8.98\\FlClash-0.8.98"]
+cwd = "E:\\aex\\Documents\\FlClash-0.8.98\\FlClash-0.8.98"
+startup_timeout_sec = 90
+[mcp_servers.gortex.env]
+XDG_CONFIG_HOME = "C:\\EXEXX\\code-Manager-rust\\Gortex\\config"
+XDG_DATA_HOME = "C:\\EXEXX\\code-Manager-rust\\Gortex\\data"
+XDG_CACHE_HOME = "C:\\EXEXX\\code-Manager-rust\\Gortex\\cache"
+GORTEX_DAEMON_SOCKET = "C:\\EXEXX\\code-Manager-rust\\Gortex\\run\\daemon.sock"
+GORTEX_DAEMON_PIDFILE = "C:\\EXEXX\\code-Manager-rust\\Gortex\\run\\daemon.pid"
+GORTEX_DAEMON_LOGFILE = "C:\\EXEXX\\code-Manager-rust\\Gortex\\run\\daemon.log"
+GORTEX_DAEMON_STATEFILE = "C:\\EXEXX\\code-Manager-rust\\Gortex\\run\\daemon.state.json"
+GORTEX_INDEX_WORKERS = "8"
+GORTEX_RECONCILE_INTERVAL = "1h"
+GORTEX_DAEMON_IDLE_TIMEOUT = "0"
