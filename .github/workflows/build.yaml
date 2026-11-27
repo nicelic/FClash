@@ -259,10 +259,10 @@ jobs:
       os: ubuntu-latest
       arch: arm64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-android-arm:
@@ -273,10 +273,10 @@ jobs:
       os: ubuntu-latest
       arch: arm
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-android-amd64:
@@ -287,10 +287,10 @@ jobs:
       os: ubuntu-latest
       arch: amd64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-windows-amd64:
@@ -301,10 +301,10 @@ jobs:
       os: Windows-2022
       arch: amd64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-windows-arm64:
@@ -315,10 +315,10 @@ jobs:
       os: windows-11-arm
       arch: arm64
       flutter_channel: master
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-linux-amd64:
@@ -329,10 +329,10 @@ jobs:
       os: ubuntu-22.04
       arch: amd64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-linux-arm64:
@@ -343,10 +343,10 @@ jobs:
       os: ubuntu-24.04-arm
       arch: arm64
       flutter_channel: master
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-macos-arm64:
@@ -357,10 +357,10 @@ jobs:
       os: macos-latest
       arch: arm64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   build-macos-amd64:
@@ -371,10 +371,10 @@ jobs:
       os: macos-15-intel
       arch: amd64
       flutter_channel: stable
-      flutter_version: ${{ env.FLUTTER_VERSION }}
-      go_version: ${{ env.GO_VERSION }}
-      ndk_version: ${{ env.NDK_VERSION }}
-      is_stable: ${{ env.IS_STABLE }}
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
     secrets: inherit
 
   publish-android-arm64:
