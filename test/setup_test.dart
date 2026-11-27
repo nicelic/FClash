@@ -71,5 +71,39 @@ hooks:
       expect(setup.appImageToolArch('arm64'), 'aarch64');
       expect(setup.appImageToolArch('amd64'), 'x86_64');
     });
+
+    test('parses Android --arch option for split-ABI CI jobs', () {
+      final results = setup.createSetupArgParser().parse([
+        'android',
+        '--arch',
+        'arm64',
+        '--env',
+        'stable',
+      ]);
+
+      expect(results['arch'], 'arm64');
+      expect(results['env'], 'stable');
+      expect(results.rest, ['android']);
+    });
+
+    test('resolves distributor stamp path from PUB_CACHE or platform home', () {
+      final explicit = setup.distributorStampPath(
+        {'PUB_CACHE': '/tmp/pub-cache'},
+        isWindows: false,
+      );
+      final unixHome = setup.distributorStampPath(
+        {'HOME': '/home/runner'},
+        isWindows: false,
+      );
+      final windowsLocal = setup.distributorStampPath(
+        {'LOCALAPPDATA': r'C:\Users\runner\AppData\Local'},
+        isWindows: true,
+      );
+
+      expect(explicit, isNotNull);
+      expect(explicit, contains('.flclash_distributor_ref'));
+      expect(unixHome, contains('.pub-cache'));
+      expect(windowsLocal, contains('Cache'));
+    });
   });
 }

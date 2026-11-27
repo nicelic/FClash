@@ -259,8 +259,9 @@ directories: `plugins` (local Flutter packages and the setup build tool), `go`
 (the Core wrapper, plus an NDK-backed vet of the Android files), `android`
 (JVM unit tests for `:common`, `:service` and `:app`, with the Flutter compile
 tasks excluded so no native build hook runs), `rust` (both crates), and a
-Windows runner for the helper's `windows-service` feature. Release builds start
-once all of them pass.
+Windows runner for the helper's `windows-service` feature. On tag pushes,
+packaging jobs run in parallel with checks, verify their artifacts locally, and
+publish incrementally to the GitHub Release as soon as their checks pass.
 
 `bash tool/check_plugins.sh` is that plugin gate, and CI runs the same script.
 It discovers every `plugins/*/pubspec.yaml`, analyzes each package, and runs

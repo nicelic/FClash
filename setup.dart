@@ -178,22 +178,8 @@ Future<int> _package(
   final depExit = await _ensureDependencies(platform);
   if (depExit != 0) return depExit;
 
-  final activateResult = await Process.run('dart', [
-    'pub',
-    'global',
-    'activate',
-    '-s',
-    'git',
-    'https://github.com/chen08209/flutter_distributor.git',
-    '--git-ref',
-    'v0.6.11-flclash.2',
-    '--git-path',
-    'packages/flutter_distributor',
-  ]);
-  if (activateResult.exitCode != 0) {
-    stderr.write(activateResult.stderr);
-    return activateResult.exitCode;
-  }
+  final distributorExit = await _ensureFlutterDistributor();
+  if (distributorExit != 0) return distributorExit;
 
   final process = await Process.start(
     'flutter_distributor',
@@ -267,30 +253,117 @@ Future<int> _ensureMacosDependencies() async {
   return result.exitCode;
 }
 
-Future<int> _ensureLinuxDependencies() async {
-  const pkgGroups = <List<String>>[
-    ['ninja-build', 'libgtk-3-dev'],
-    ['libayatana-appindicator3-dev'],
-    ['libsecret-1-dev'],
-    ['locate'],
-    ['rpm', 'patchelf'],
-    ['libfuse2'],
-  ];
+const _distributorGitUrl =
+    'https://github.com/chen08209/flutter_distributor.git';
+const _distributorGitRef = 'v0.6.11-flclash.2';
+const _distributorGitPath = 'packages/flutter_distributor';
+const _distributorStamp =
+    '$_distributorGitUrl@$_distributorGitRef#$_distributorGitPath';
 
-  final missingGroups = <List<String>>[];
-  for (final group in pkgGroups) {
-    final missingPkgs = <String>[];
-    for (final pkg in group) {
-      if (!await _isDebianPackageInstalled(pkg)) {
-        missingPkgs.add(pkg);
-      }
+String? resolvePubCacheDir(
+  Map<String, String> environment, {
+  required bool isWindows,
+}) {
+  final explicit = environment['PUB_CACHE']?.trim();
+  if (explicit != null && explicit.isNotEmpty) {
+    return explicit;
+  }
+  if (isWindows) {
+    final localAppData = environment['LOCALAPPDATA']?.trim();
+    if (localAppData != null && localAppData.isNotEmpty) {
+      return p.join(localAppData, 'Pub', 'Cache');
     }
-    if (missingPkgs.isNotEmpty) {
-      missingGroups.add(missingPkgs);
+    final userProfile = environment['USERPROFILE']?.trim();
+    if (userProfile != null && userProfile.isNotEmpty) {
+      return p.join(userProfile, '.pub-cache');
+    }
+    return null;
+  }
+  final home = environment['HOME']?.trim();
+  if (home != null && home.isNotEmpty) {
+    return p.join(home, '.pub-cache');
+  }
+  return null;
+}
+
+String? distributorStampPath(
+  Map<String, String> environment, {
+  required bool isWindows,
+}) {
+  final dir = resolvePubCacheDir(environment, isWindows: isWindows);
+  return dir == null ? null : p.join(dir, '.flclash_distributor_ref');
+}
+
+Future<int> _ensureFlutterDistributor() async {
+  final stampPath = distributorStampPath(
+    Platform.environment,
+    isWindows: Platform.isWindows,
+  );
+  final stampFile = stampPath == null ? null : File(stampPath);
+  if (stampFile != null &&
+      stampFile.existsSync() &&
+      stampFile.readAsStringSync().trim() == _distributorStamp) {
+    try {
+      final versionResult = await Process.run(
+        'flutter_distributor',
+        ['--version'],
+        runInShell: Platform.isWindows,
+      );
+      if (versionResult.exitCode == 0) {
+        stdout.writeln(
+          'flutter_distributor $_distributorGitRef already active, skipping.',
+        );
+        return 0;
+      }
+    } on ProcessException {
+      // Binary missing despite cached stamp; fall through to re-activate.
     }
   }
 
-  if (missingGroups.isEmpty) {
+  final activateResult = await Process.run('dart', [
+    'pub',
+    'global',
+    'activate',
+    '-s',
+    'git',
+    _distributorGitUrl,
+    '--git-ref',
+    _distributorGitRef,
+    '--git-path',
+    _distributorGitPath,
+  ]);
+  if (activateResult.exitCode != 0) {
+    stderr.write(activateResult.stderr);
+    return activateResult.exitCode;
+  }
+
+  if (stampFile != null) {
+    stampFile.parent.createSync(recursive: true);
+    stampFile.writeAsStringSync('$_distributorStamp\n');
+  }
+  return 0;
+}
+
+Future<int> _ensureLinuxDependencies() async {
+  const pkgs = <String>[
+    'ninja-build',
+    'libgtk-3-dev',
+    'libayatana-appindicator3-dev',
+    'libsecret-1-dev',
+    'locate',
+    'rpm',
+    'patchelf',
+    'libfuse2',
+  ];
+
+  final missingPkgs = <String>[];
+  for (final pkg in pkgs) {
+    if (!await _isDebianPackageInstalled(pkg)) {
+      missingPkgs.add(pkg);
+    }
+  }
+
+  if (missingPkgs.isEmpty) {
     stdout.writeln('All Linux build dependencies already installed, skipping.');
   } else {
     stdout.writeln('Updating apt package lists...');
@@ -306,13 +379,11 @@ Future<int> _ensureLinuxDependencies() async {
       );
     }
 
-    for (final missingPkgs in missingGroups) {
-      stdout.writeln(
-        'Installing Linux build dependencies: ${missingPkgs.join(', ')}...',
-      );
-      final installExit = await _installLinuxPackages(missingPkgs);
-      if (installExit != 0) return installExit;
-    }
+    stdout.writeln(
+      'Installing Linux build dependencies: ${missingPkgs.join(', ')}...',
+    );
+    final installExit = await _installLinuxPackages(missingPkgs);
+    if (installExit != 0) return installExit;
   }
 
   const appimagetool = '/usr/local/bin/appimagetool';

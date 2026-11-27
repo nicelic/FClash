@@ -13,7 +13,7 @@ concurrency:
 
 env:
   IS_STABLE: ${{ !contains(github.ref, '-') }}
-  FLUTTER_VERSION: '3.47.1'
+  FLUTTER_VERSION: '3.47.9'
   GO_VERSION: '1.26.4'
   NDK_VERSION: r28c
 
@@ -24,8 +24,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Test commit message hook
         run: bash tool/check_commit_msg_test.sh
@@ -39,6 +37,7 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+          pub-cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -74,6 +73,7 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+          pub-cache: true
 
       - name: Validate local Flutter packages
         run: bash tool/check_plugins.sh
@@ -120,13 +120,13 @@ jobs:
         id: ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
+          local-cache: true
 
       - name: Validate the Android core library
         working-directory: core
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
-          # Nothing else compiles the `android && cgo` files before a `v*` tag.
           CC="$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android21-clang)"
           test -x "$CC" || { echo "NDK clang not found at $CC" >&2; exit 1; }
           tags="$(sed -n 's/^tags: *//p' ../build_config.yaml)"
@@ -147,6 +147,7 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+          pub-cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -156,6 +157,7 @@ jobs:
         id: ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
+          local-cache: true
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -176,11 +178,9 @@ jobs:
             echo "sdk.dir=$ANDROID_HOME"
           } > local.properties
           wrapper="$FLUTTER_ROOT/bin/cache/artifacts/gradle_wrapper"
-          test -d "$wrapper" || flutter precache
+          test -d "$wrapper" || flutter precache --android
           cp -R "$wrapper/." .
           chmod +x gradlew
-          # `:core` only calls System.loadLibrary; the excluded Flutter tasks would run
-          # the native build hooks for every debug ABI, which no JVM unit test consumes.
           ./gradlew :common:testDebugUnitTest :service:testDebugUnitTest :app:testDebugUnitTest \
             -x :app:compileFlutterBuildDebug -x :app:copyFlutterAssetsDebug
 
@@ -226,154 +226,16 @@ jobs:
       - name: Run Windows service tests
         run: cargo test --manifest-path services/helper/Cargo.toml --features windows-service
 
-  build:
+  prepare-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - platform: android
-            os: ubuntu-latest
-          - platform: windows
-            os: Windows-2022
-            arch: amd64
-          - platform: linux
-            os: ubuntu-22.04
-            arch: amd64
-          - platform: macos
-            os: macos-15-intel
-            arch: amd64
-          - platform: macos
-            os: macos-latest
-            arch: arm64
-          - platform: windows
-            os: windows-11-arm
-            arch: arm64
-          - platform: linux
-            os: ubuntu-24.04-arm
-            arch: arm64
-
-    steps:
-      - name: Setup rust
-        if: startsWith(matrix.os, 'windows-11-arm')
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile rustup-init.exe
-          .\rustup-init.exe -y --default-toolchain stable
-          $cargoPath = "$env:USERPROFILE\.cargo\bin"
-          Add-Content $env:GITHUB_PATH $cargoPath
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Android Signing
-        if: startsWith(matrix.platform, 'android')
-        env:
-          KEYSTORE: ${{ secrets.KEYSTORE }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          if [[ -n "$KEYSTORE" && -n "$KEY_ALIAS" && -n "$STORE_PASSWORD" && -n "$KEY_PASSWORD" ]]; then
-            printf '%s' "$KEYSTORE" | base64 --decode > android/app/keystore.jks
-            {
-              echo "keyAlias=$KEY_ALIAS"
-              echo "storePassword=$STORE_PASSWORD"
-              echo "keyPassword=$KEY_PASSWORD"
-            } >> android/local.properties
-          fi
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: core/go.sum
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.platform }}-${{ matrix.arch || 'all' }}
-          workspaces: services/helper
-          cache-directories: .dart_tool/hooks_runner
-
-      - name: Setup Gradle
-        if: startsWith(matrix.platform,'android')
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Enable git long paths (Windows)
-        if: startsWith(matrix.os, 'windows')
-        run: git config --global core.longpaths true
-
-      # Stable publishes no Windows or Linux arm64 archive; master makes the action
-      # clone the SDK at the pinned tag and let it fetch the host's own Dart SDK.
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: master
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Setup Xcode
-        if: startsWith(matrix.platform,'macos')
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app || sudo xcode-select -s /Applications/Xcode_26.2.app
-          xcodebuild -version
-
-      - name: Setup NDK
-        if: startsWith(matrix.platform,'android')
-        uses: nttld/setup-ndk@v1
-        id: build-ndk
-        with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          add-to-path: true
-          link-to-sdk: true
-
-      - name: Get Flutter Dependency
-        run: |
-          flutter --version
-          flutter pub get
-
-      - name: Generate code and l10n
-        shell: bash
-        run: |
-          awk '{gsub(/build_assets: true/, "build_assets: false"); print}' pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml
-          dart run build_runner build --delete-conflicting-outputs
-          dart run intl_utils:generate
-          git checkout -- pubspec.yaml
-
-      - name: Sync version from tag
-        env:
-          TAG_NAME: ${{ github.ref_name }}
-        run: dart tool/sync_version.dart
-
-      - name: Setup
-        env:
-          ANDROID_NDK_HOME: ${{ steps.build-ndk.outputs.ndk-path }}
-        run: dart setup.dart ${{ matrix.platform }} ${{ env.IS_STABLE == 'true' && '--env stable' || '' }} -v
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifact-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) }}
-          path: ./dist
-          overwrite: true
-
-  upload:
+    name: Prepare release
+    needs: [ dart, plugins, go, android, rust ]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    needs: [ build ]
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download
-        uses: actions/download-artifact@v4
-        with:
-          path: ./dist/
-          pattern: artifact-*
-          merge-multiple: true
 
       - name: Patch release.md
         env:
@@ -382,15 +244,258 @@ jobs:
           pkg_version=$(echo "$TAG_NAME" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
           sed -e "s|vVERSION|$TAG_NAME|g" -e "s|VERSION|$pkg_version|g" ./.github/release_template.md > release.md
 
-      - name: Generate sha256
-        run: |
-          cd ./dist
-          sha256sum ./* > SHA256SUMS
-
-      - name: Release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./dist/*
           body_path: './release.md'
           generate_release_notes: true
-          prerelease: ${{ env.IS_STABLE != 'true' }}
+          prerelease: true
+
+  build-android-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-android-arm:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: arm
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-android-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-windows-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: windows
+      os: Windows-2022
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-windows-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: windows
+      os: windows-11-arm
+      arch: arm64
+      flutter_channel: master
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-linux-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: linux
+      os: ubuntu-22.04
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-linux-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: linux
+      os: ubuntu-24.04-arm
+      arch: arm64
+      flutter_channel: master
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-macos-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: macos
+      os: macos-latest
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  build-macos-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: macos
+      os: macos-15-intel
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: ${{ env.FLUTTER_VERSION }}
+      go_version: ${{ env.GO_VERSION }}
+      ndk_version: ${{ env.NDK_VERSION }}
+      is_stable: ${{ env.IS_STABLE }}
+    secrets: inherit
+
+  publish-android-arm64:
+    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-arm64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-android-arm64
+    secrets: inherit
+
+  publish-android-arm:
+    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-arm ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-android-arm
+    secrets: inherit
+
+  publish-android-amd64:
+    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-amd64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-android-amd64
+    secrets: inherit
+
+  publish-windows-amd64:
+    needs: [ prepare-release, dart, plugins, go, rust, windows-helper-test, build-windows-amd64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-windows-amd64
+    secrets: inherit
+
+  publish-windows-arm64:
+    needs: [ prepare-release, dart, plugins, go, rust, windows-helper-test, build-windows-arm64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-windows-arm64
+    secrets: inherit
+
+  publish-linux-amd64:
+    needs: [ prepare-release, dart, plugins, go, rust, build-linux-amd64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-linux-amd64
+    secrets: inherit
+
+  publish-linux-arm64:
+    needs: [ prepare-release, dart, plugins, go, rust, build-linux-arm64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-linux-arm64
+    secrets: inherit
+
+  publish-macos-arm64:
+    needs: [ prepare-release, dart, plugins, go, rust, build-macos-arm64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-macos-arm64
+    secrets: inherit
+
+  publish-macos-amd64:
+    needs: [ prepare-release, dart, plugins, go, rust, build-macos-amd64 ]
+    uses: ./.github/workflows/_publish.yaml
+    permissions:
+      contents: write
+    with:
+      artifact_name: pkg-macos-amd64
+    secrets: inherit
+
+  finalize-release:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' }}
+    name: Finalize release
+    needs:
+      - prepare-release
+      - publish-android-arm64
+      - publish-android-arm
+      - publish-android-amd64
+      - publish-windows-amd64
+      - publish-windows-arm64
+      - publish-linux-amd64
+      - publish-linux-arm64
+      - publish-macos-arm64
+      - publish-macos-amd64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download checksum artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./checksums
+          pattern: sha256-*
+          merge-multiple: true
+
+      - name: Publish SHA256SUMS and finalize release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALL_PUBLISHED: ${{ needs.publish-android-arm64.result == 'success' && needs.publish-android-arm.result == 'success' && needs.publish-android-amd64.result == 'success' && needs.publish-windows-amd64.result == 'success' && needs.publish-windows-arm64.result == 'success' && needs.publish-linux-amd64.result == 'success' && needs.publish-linux-arm64.result == 'success' && needs.publish-macos-arm64.result == 'success' && needs.publish-macos-amd64.result == 'success' }}
+        run: |
+          if compgen -G './checksums/SHA256SUMS.*' > /dev/null; then
+            LC_ALL=C sort -k2 ./checksums/SHA256SUMS.* > SHA256SUMS
+            gh release upload "${{ github.ref_name }}" ./SHA256SUMS \
+              --repo "${{ github.repository }}" \
+              --clobber
+          fi
+          if [ "${{ env.IS_STABLE }}" = "true" ] && [ "$ALL_PUBLISHED" = "true" ]; then
+            gh release edit "${{ github.ref_name }}" \
+              --repo "${{ github.repository }}" \
+              --prerelease=false
+          fi

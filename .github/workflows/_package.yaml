@@ -1,0 +1,198 @@
+name: package-target
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+      flutter_channel:
+        required: true
+        type: string
+      flutter_version:
+        required: true
+        type: string
+      go_version:
+        required: true
+        type: string
+      ndk_version:
+        required: true
+        type: string
+      is_stable:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }} (${{ inputs.arch }})
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Setup rust (windows-11-arm)
+        if: startsWith(inputs.os, 'windows-11-arm')
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:USERPROFILE\.cargo\bin\rustup.exe")) {
+            Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile rustup-init.exe
+            .\rustup-init.exe -y --default-toolchain none --profile minimal
+          }
+          Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.cargo\bin"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Android Signing
+        if: inputs.platform == 'android'
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE" && -n "$KEY_ALIAS" && -n "$STORE_PASSWORD" && -n "$KEY_PASSWORD" ]]; then
+            printf '%s' "$KEYSTORE" | base64 --decode > android/app/keystore.jks
+            {
+              echo "keyAlias=$KEY_ALIAS"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyPassword=$KEY_PASSWORD"
+            } >> android/local.properties
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: core/go.sum
+
+      - name: Cache Rust toolchains
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains
+          key: rustup-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('plugins/rust_api/rust/rust-toolchain.toml') }}
+
+      - name: Ensure default Rust toolchain (windows-11-arm)
+        if: startsWith(inputs.os, 'windows-11-arm')
+        shell: pwsh
+        run: |
+          $tc = (Select-String -Path 'plugins/rust_api/rust/rust-toolchain.toml' -Pattern 'channel\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          if (-not (rustup toolchain list | Select-String -SimpleMatch $tc -Quiet)) {
+            rustup toolchain install $tc --profile minimal
+          }
+          rustup default $tc
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ inputs.platform }}-${{ inputs.arch }}
+          workspaces: |
+            services/helper
+            plugins/rust_api/rust
+          cache-directories: .dart_tool/hooks_runner
+
+      - name: Setup Gradle
+        if: inputs.platform == 'android'
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Enable git long paths (Windows)
+        if: startsWith(inputs.os, 'windows')
+        run: git config --global core.longpaths true
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ inputs.flutter_channel }}
+          flutter-version: ${{ inputs.flutter_version }}
+          cache: true
+          pub-cache: true
+
+      - name: Setup Xcode
+        if: inputs.platform == 'macos'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app || sudo xcode-select -s /Applications/Xcode_26.2.app
+          xcodebuild -version
+
+      - name: Cache macOS npm cache
+        if: inputs.platform == 'macos'
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-appdmg-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Cache Linux appimagetool
+        if: inputs.platform == 'linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flclash-tools
+          key: appimagetool-${{ runner.arch }}-v1
+
+      - name: Restore Linux appimagetool
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          if [ -f "$HOME/.cache/flclash-tools/appimagetool" ] && [ ! -f /usr/local/bin/appimagetool ]; then
+            sudo install -m 0755 "$HOME/.cache/flclash-tools/appimagetool" /usr/local/bin/appimagetool
+          fi
+
+      - name: Setup NDK
+        if: inputs.platform == 'android'
+        uses: nttld/setup-ndk@v1
+        id: build-ndk
+        with:
+          ndk-version: ${{ inputs.ndk_version }}
+          local-cache: true
+          add-to-path: true
+          link-to-sdk: true
+
+      - name: Get Flutter Dependencies
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Sync version from tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: dart tool/sync_version.dart
+
+      - name: Package
+        env:
+          ANDROID_NDK_HOME: ${{ steps.build-ndk.outputs.ndk-path }}
+        run: dart setup.dart ${{ inputs.platform }} --env ${{ inputs.is_stable == 'true' && 'stable' || 'pre' }} ${{ inputs.platform == 'android' && format('--arch {0}', inputs.arch) || '' }} -v
+
+      - name: Save Linux appimagetool for cache
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          if [ -f /usr/local/bin/appimagetool ] && [ ! -f "$HOME/.cache/flclash-tools/appimagetool" ]; then
+            mkdir -p "$HOME/.cache/flclash-tools"
+            cp /usr/local/bin/appimagetool "$HOME/.cache/flclash-tools/appimagetool"
+          fi
+
+      - name: Verify artifacts (Unix/Android)
+        if: inputs.platform != 'windows'
+        shell: bash
+        run: bash tool/verify_release_artifacts.sh "${{ inputs.platform }}" "${{ inputs.arch }}" "${{ github.ref_name }}" "./dist" "./checksums/SHA256SUMS.${{ inputs.platform }}-${{ inputs.arch }}"
+
+      - name: Verify artifacts (Windows)
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: pwsh -NoProfile -File tool/verify_windows_artifacts.ps1 -Arch "${{ inputs.arch }}" -DistDir "./dist" -ChecksumFile "./checksums/SHA256SUMS.${{ inputs.platform }}-${{ inputs.arch }}"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ inputs.platform }}-${{ inputs.arch }}
+          path: ./dist/*
+          overwrite: true
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256-${{ inputs.platform }}-${{ inputs.arch }}
+          path: ./checksums/*
+          overwrite: true
