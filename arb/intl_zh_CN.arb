@@ -623,5 +623,10 @@
   "networkInterface": "网卡",
   "congestionController": "拥塞控制算法",
   "mtu": "MTU",
-  "mtuTip": "MTU 必须为 {min} 至 {max} 之间的整数"
+  "mtuTip": "MTU 必须为 {min} 至 {max} 之间的整数",
+  "coreVersion": "内核版本",
+  "sortBySpeed": "按速度排序",
+  "sortByTraffic": "按流量排序",
+  "sortByTime": "按时间排序",
+  "sortByDefaultTime": "默认(时间)"
 }

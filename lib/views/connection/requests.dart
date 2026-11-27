@@ -50,6 +50,11 @@ class _RequestsViewState extends ConsumerState<RequestsView> {
   @override
   Widget build(BuildContext context) {
     final appLocalizations = context.appLocalizations;
+    final showProcess = ref.watch(
+      patchClashConfigProvider.select(
+        (state) => state.findProcessMode == FindProcessMode.always,
+      ),
+    );
     return CommonScaffold(
       title: appLocalizations.requests,
       searchState: AppBarSearchState(onSearch: _listController.search),
@@ -110,6 +115,7 @@ class _RequestsViewState extends ConsumerState<RequestsView> {
                     padding: EdgeInsets.only(
                       bottom: 16 + BottomInsetScope.of(context),
                     ),
+                    showProcess: showProcess,
                     trackerInfos: requests,
                     detailTitle: appLocalizations.details(
                       appLocalizations.request,

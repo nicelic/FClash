@@ -80,7 +80,11 @@ class GoBuilder {
         try {
           await runCommandStream(
             'go',
-            _buildArguments(target, outFile: staged),
+            _buildArguments(
+              target,
+              outFile: staged,
+              mihomoVersion: _resolveMihomoVersion(env),
+            ),
             workingDirectory: _corePath,
             environment: env,
           );
@@ -136,9 +140,40 @@ class GoBuilder {
     return baseTags.join(',');
   }
 
-  List<String> _buildArguments(Target target, {String? outFile}) => [
+  String? _resolveMihomoVersion(Map<String, String> environment) {
+    final result = runCommand(
+      'go',
+      const [
+        'list',
+        '-m',
+        '-f',
+        '{{if and .Replace .Replace.Version}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}',
+        'github.com/metacubex/mihomo',
+      ],
+      workingDirectory: _corePath,
+      environment: environment,
+    );
+    final version = (result.stdout as String).trim();
+    return version.isEmpty ? null : version;
+  }
+
+  String _ldflagsFor(String? mihomoVersion) {
+    final base = config.goLdflags.trim();
+    if (mihomoVersion == null || mihomoVersion.isEmpty) {
+      return base;
+    }
+    final versionFlag =
+        '-X github.com/metacubex/mihomo/constant.Version=$mihomoVersion';
+    return base.isEmpty ? versionFlag : '$base $versionFlag';
+  }
+
+  List<String> _buildArguments(
+    Target target, {
+    String? outFile,
+    String? mihomoVersion,
+  }) => [
     'build',
-    '-ldflags=${config.goLdflags}',
+    '-ldflags=${_ldflagsFor(mihomoVersion)}',
     '-tags=${_tagsFor(target)}',
     if (target.isLib) '-buildmode=c-shared',
     if (outFile != null) ...['-o', outFile],
@@ -146,6 +181,7 @@ class GoBuilder {
 
   Future<Fingerprint> _calculateFingerprint(Target target) async {
     final env = _buildEnvironment(target);
+    final mihomoVersion = _resolveMihomoVersion(env);
     final builder = FingerprintBuilder(rootDir: rootDir)
       ..addValue('cache_schema', BuildCache.schemaVersion)
       ..addValue('kind', 'go-core')
@@ -156,7 +192,10 @@ class GoBuilder {
       })
       ..addValue('config', config.toFingerprintMap())
       ..addValue('environment', env)
-      ..addValue('arguments', _buildArguments(target));
+      ..addValue(
+        'arguments',
+        _buildArguments(target, mihomoVersion: mihomoVersion),
+      );
 
     final goEnvResult = runCommand(
       'go',

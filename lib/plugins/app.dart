@@ -82,6 +82,8 @@ class App {
         false;
   }
 
+  static const maxPackageIconCacheSize = 128;
+
   final Map<String, ImageProvider?> _packageIcons = {};
   final Map<String, Future<ImageProvider?>> _packageIconTasks = {};
 
@@ -95,7 +97,9 @@ class App {
 
   Future<ImageProvider?> getPackageIcon(String packageName) {
     if (_packageIcons.containsKey(packageName)) {
-      return Future.value(_packageIcons[packageName]);
+      final cached = _packageIcons.remove(packageName);
+      _packageIcons[packageName] = cached;
+      return Future.value(cached);
     }
     return _packageIconTasks[packageName] ??= _loadPackageIcon(packageName);
   }
@@ -104,6 +108,10 @@ class App {
     var icon = await _requestPackageIcon(packageName);
     if (icon == null && packageName.isNotEmpty) {
       icon = await getPackageIcon('');
+    }
+    if (!_packageIcons.containsKey(packageName) &&
+        _packageIcons.length >= maxPackageIconCacheSize) {
+      _packageIcons.remove(_packageIcons.keys.first);
     }
     _packageIcons[packageName] = icon;
     unawaited(_packageIconTasks.remove(packageName));

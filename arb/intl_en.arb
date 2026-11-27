@@ -623,5 +623,10 @@
   "networkInterface": "Network interface",
   "congestionController": "Congestion control",
   "mtu": "MTU",
-  "mtuTip": "MTU must be between {min} and {max}"
+  "mtuTip": "MTU must be between {min} and {max}",
+  "coreVersion": "Core version",
+  "sortBySpeed": "Sort by speed",
+  "sortByTraffic": "Sort by traffic",
+  "sortByTime": "Sort by time",
+  "sortByDefaultTime": "Default (Time)"
 }

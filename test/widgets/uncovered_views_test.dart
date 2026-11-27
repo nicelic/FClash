@@ -151,10 +151,17 @@ void main() {
         child: const TestApp(child: AboutView()),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
+    final l10n = AppLocalizations.current;
     expect(find.byType(AboutView), findsOneWidget);
+    expect(find.text(l10n.coreVersion), findsOneWidget);
+    expect(find.text('--'), findsOneWidget);
     expect(find.text('Telegram'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text(l10n.coreVersion)).dy,
+      lessThan(tester.getTopLeft(find.text(l10n.checkUpdate)).dy),
+    );
     expect(tester.takeException(), null);
 
     final scrollables = find.byType(Scrollable);
@@ -164,6 +171,32 @@ void main() {
         await tester.pump();
       }
     }
+    expect(tester.takeException(), null);
+  });
+
+  testWidgets('about view displays dynamic core version above checkUpdate', (
+    tester,
+  ) async {
+    final container = _containerFor(
+      tester,
+      overrides: [coreVersionProvider.overrideWith((_) async => 'v1.19.32')],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const TestApp(child: AboutView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.current;
+    expect(find.text(l10n.coreVersion), findsOneWidget);
+    expect(find.text('v1.19.32'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text(l10n.coreVersion)).dy,
+      lessThan(tester.getTopLeft(find.text(l10n.checkUpdate)).dy),
+    );
     expect(tester.takeException(), null);
   });
 

@@ -243,6 +243,12 @@ void main() {
       expect(result.down, 4);
     });
 
+    test('getCoreVersion delegates core version string', () async {
+      when(() => mock.getCoreVersion()).thenAnswer((_) async => 'v1.19.34');
+      final result = await controller.getCoreVersion();
+      expect(result, 'v1.19.34');
+    });
+
     test('getMemory delegates numeric memory', () async {
       when(() => mock.getMemory()).thenAnswer((_) async => 2048);
       final result = await controller.getMemory();

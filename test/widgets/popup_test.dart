@@ -537,4 +537,28 @@ void main() {
     expect(lastSize.height, closeTo(foldedSize.height, 1));
     await tester.pumpAndSettle();
   });
+
+  testWidgets('selected item renders default check or custom trailing', (
+    tester,
+  ) async {
+    final open = await pumpMenu(tester, [
+      const CommonPopupMenuItem(
+        label: 'default check',
+        selected: true,
+      ),
+      const CommonPopupMenuItem(
+        label: 'custom trailing',
+        selected: true,
+        trailing: Icon(Icons.arrow_downward),
+      ),
+      const CommonPopupMenuItem(
+        label: 'unselected',
+      ),
+    ]);
+    open();
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+  });
 }

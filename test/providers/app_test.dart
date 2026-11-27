@@ -5,11 +5,15 @@ import 'package:dio/dio.dart';
 import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/fixed.dart';
 import 'package:fl_clash/common/request.dart';
+import 'package:fl_clash/core/controller.dart';
+import 'package:fl_clash/core/interface.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/app.dart';
+import 'package:fl_clash/providers/core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:riverpod/riverpod.dart';
 
 void main() {
@@ -516,7 +520,64 @@ void main() {
       },
     );
   });
+
+  group('CoreVersion provider', () {
+    test('returns empty string without querying core while disconnected', () async {
+      final core = _MockCoreHandlerInterface();
+      final scopedContainer = ProviderContainer(
+        overrides: [
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        ],
+      );
+      addTearDown(scopedContainer.dispose);
+
+      expect(await scopedContainer.read(coreVersionProvider.future), '');
+      verifyNever(() => core.getCoreVersion());
+    });
+
+    test('queries core version when connected and refreshes on reconnect', () async {
+      final core = _MockCoreHandlerInterface();
+      var currentVersion = 'v1.19.34';
+      when(() => core.getCoreVersion()).thenAnswer((_) async => currentVersion);
+      final scopedContainer = ProviderContainer(
+        overrides: [
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        ],
+      );
+      addTearDown(scopedContainer.dispose);
+
+      scopedContainer.read(coreStatusProvider.notifier).value =
+          CoreStatus.connected;
+      expect(await scopedContainer.read(coreVersionProvider.future), 'v1.19.34');
+
+      currentVersion = 'v1.19.32';
+      scopedContainer.read(coreStatusProvider.notifier).value =
+          CoreStatus.disconnected;
+      expect(await scopedContainer.read(coreVersionProvider.future), '');
+
+      scopedContainer.read(coreStatusProvider.notifier).value =
+          CoreStatus.connected;
+      expect(await scopedContainer.read(coreVersionProvider.future), 'v1.19.32');
+    });
+
+    test('returns empty string if core query fails', () async {
+      final core = _MockCoreHandlerInterface();
+      when(() => core.getCoreVersion()).thenThrow(StateError('core error'));
+      final scopedContainer = ProviderContainer(
+        overrides: [
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        ],
+      );
+      addTearDown(scopedContainer.dispose);
+
+      scopedContainer.read(coreStatusProvider.notifier).value =
+          CoreStatus.connected;
+      expect(await scopedContainer.read(coreVersionProvider.future), '');
+    });
+  });
 }
+
+class _MockCoreHandlerInterface extends Mock implements CoreHandlerInterface {}
 
 class _DelayedCancelIpAdapter implements HttpClientAdapter {
   static const _sourceCount = 7;

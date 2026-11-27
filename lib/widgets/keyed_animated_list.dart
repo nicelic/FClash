@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
@@ -9,22 +10,26 @@ const _defaultDuration = Duration(milliseconds: 300);
 /// from their previous slot to the new one.
 class KeyedAnimatedList<T> extends StatefulWidget {
   final List<T> items;
+  final ValueListenable<List<T>>? itemsListenable;
   final Object Function(T item) keyOf;
   final Widget Function(BuildContext context, T item) itemBuilder;
   final Widget? separator;
   final ScrollController? controller;
   final EdgeInsetsGeometry? padding;
   final Duration duration;
+  final bool animateMoves;
 
   const KeyedAnimatedList({
     super.key,
     required this.items,
+    this.itemsListenable,
     required this.keyOf,
     required this.itemBuilder,
     this.separator,
     this.controller,
     this.padding,
     this.duration = _defaultDuration,
+    this.animateMoves = true,
   });
 
   @override
@@ -34,10 +39,23 @@ class KeyedAnimatedList<T> extends StatefulWidget {
 class _Entry<T> {
   final Object key;
   T item;
+  final ValueNotifier<T> itemNotifier;
   AnimationController? controller;
   bool removing = false;
 
-  _Entry(this.key, this.item);
+  _Entry(this.key, this.item) : itemNotifier = ValueNotifier<T>(item);
+
+  void updateItem(T value) {
+    item = value;
+    if (itemNotifier.value != value) {
+      itemNotifier.value = value;
+    }
+  }
+
+  void dispose() {
+    itemNotifier.dispose();
+    controller?.dispose();
+  }
 }
 
 class _KeyedAnimatedListState<T> extends State<KeyedAnimatedList<T>>
@@ -45,26 +63,44 @@ class _KeyedAnimatedListState<T> extends State<KeyedAnimatedList<T>>
   List<_Entry<T>> _entries = [];
   int _generation = 0;
 
+  List<T> get _effectiveItems => widget.itemsListenable?.value ?? widget.items;
+
   @override
   void initState() {
     super.initState();
     _entries = [
-      for (final item in widget.items) _Entry(widget.keyOf(item), item),
+      for (final item in _effectiveItems) _Entry(widget.keyOf(item), item),
     ];
+    widget.itemsListenable?.addListener(_handleListenableChanged);
   }
 
   @override
   void didUpdateWidget(covariant KeyedAnimatedList<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.items, widget.items)) {
+    if (oldWidget.itemsListenable != widget.itemsListenable) {
+      oldWidget.itemsListenable?.removeListener(_handleListenableChanged);
+      widget.itemsListenable?.addListener(_handleListenableChanged);
+      _applyItems(_effectiveItems);
+      return;
+    }
+    if (widget.itemsListenable == null &&
+        !identical(oldWidget.items, widget.items)) {
       _applyItems(widget.items);
     }
   }
 
+  void _handleListenableChanged() {
+    if (!mounted) {
+      return;
+    }
+    _applyItems(_effectiveItems);
+  }
+
   @override
   void dispose() {
+    widget.itemsListenable?.removeListener(_handleListenableChanged);
     for (final entry in _entries) {
-      entry.controller?.dispose();
+      entry.dispose();
     }
     super.dispose();
   }
@@ -83,14 +119,18 @@ class _KeyedAnimatedListState<T> extends State<KeyedAnimatedList<T>>
         return;
       }
       if (!status.isAnimating) {
+        final removedEntry = status.isDismissed;
         setState(() {
           entry.controller = null;
-          if (status.isDismissed) {
+          if (removedEntry) {
             _entries.remove(entry);
           }
         });
         SchedulerBinding.instance.addPostFrameCallback((_) {
           controller.dispose();
+          if (removedEntry) {
+            entry.itemNotifier.dispose();
+          }
         });
       }
     });
@@ -136,7 +176,7 @@ class _KeyedAnimatedListState<T> extends State<KeyedAnimatedList<T>>
         next.add(entry);
         continue;
       }
-      existing.item = item;
+      existing.updateItem(item);
       if (existing.removing) {
         existing.removing = false;
         final controller = existing.controller;
@@ -148,19 +188,41 @@ class _KeyedAnimatedListState<T> extends State<KeyedAnimatedList<T>>
     }
     next.addAll(pending);
 
+    final structureChanged =
+        transitions.isNotEmpty ||
+        next.length != _entries.length ||
+        !_sameEntrySequence(_entries, next);
+    if (!structureChanged) {
+      return;
+    }
+
     setState(() {
       _entries = next;
-      _generation++;
+      if (widget.animateMoves) {
+        _generation++;
+      }
     });
     for (final transition in transitions) {
       transition();
     }
   }
 
+  bool _sameEntrySequence(List<_Entry<T>> a, List<_Entry<T>> b) {
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Widget _buildRow(BuildContext context, int index) {
     final entry = _entries[index];
     final separator = widget.separator;
-    Widget row = widget.itemBuilder(context, entry.item);
+    Widget row = ValueListenableBuilder<T>(
+      valueListenable: entry.itemNotifier,
+      builder: (context, item, _) => widget.itemBuilder(context, item),
+    );
     if (separator != null && index < _entries.length - 1) {
       row = Column(mainAxisSize: MainAxisSize.min, children: [row, separator]);
     }

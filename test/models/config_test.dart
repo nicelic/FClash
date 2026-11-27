@@ -110,6 +110,7 @@ void main() {
       expect(restored.restoreStrategy, RestoreStrategy.compatible);
       expect(restored.customUserAgent, '');
       expect(restored.testUrl, defaultTestUrl);
+      expect(restored.connectionSortMode, ConnectionSortMode.defaultTimeDesc);
     });
 
     test('custom values survive round-trip', () {
@@ -120,6 +121,7 @@ void main() {
         closeConnections: false,
         testUrl: 'https://custom.test',
         customUserAgent: 'CustomUA/1.0',
+        connectionSortMode: ConnectionSortMode.speedAsc,
       );
       final restored = roundTrip(
         () => props.toJson(),
@@ -131,6 +133,14 @@ void main() {
       expect(restored.closeConnections, false);
       expect(restored.testUrl, 'https://custom.test');
       expect(restored.customUserAgent, 'CustomUA/1.0');
+      expect(restored.connectionSortMode, ConnectionSortMode.speedAsc);
+    });
+
+    test('falls back to defaultTimeDesc for unknown connectionSortMode', () {
+      final restored = AppSettingProps.fromJson({
+        'connectionSortMode': 'removedLegacyValue',
+      });
+      expect(restored.connectionSortMode, ConnectionSortMode.defaultTimeDesc);
     });
 
     test('safeFromJson returns default on null', () {

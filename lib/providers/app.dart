@@ -241,6 +241,19 @@ class Version extends _$Version with AutoDisposeNotifierMixin {
 }
 
 @Riverpod(keepAlive: true)
+Future<String> coreVersion(Ref ref) async {
+  final coreStatus = ref.watch(coreStatusProvider);
+  if (coreStatus != CoreStatus.connected) {
+    return '';
+  }
+  try {
+    return await ref.read(coreHandlerProvider).getCoreVersion();
+  } catch (_) {
+    return '';
+  }
+}
+
+@Riverpod(keepAlive: true)
 class Groups extends _$Groups with AutoDisposeNotifierMixin {
   @override
   List<Group> build() {

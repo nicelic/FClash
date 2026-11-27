@@ -141,6 +141,17 @@ extension TrackerInfoExt on TrackerInfo {
     }
     return process.trim();
   }
+
+  String get trafficSummary {
+    final upSpeed = uploadSpeed;
+    final downSpeed = downloadSpeed;
+    if (upSpeed != null && downSpeed != null) {
+      return '${upSpeed.traffic.show}/s ↑ '
+          '${downSpeed.traffic.show}/s ↓ '
+          '(${upload.traffic.show} / ${download.traffic.show})';
+    }
+    return Traffic(up: upload, down: download).desc;
+  }
 }
 
 String _logDateTime(dynamic _) {
@@ -197,22 +208,28 @@ abstract class TrackerInfosState with _$TrackerInfosState {
 extension TrackerInfosStateExt on TrackerInfosState {
   List<TrackerInfo> get list {
     final lowerQuery = query.toLowerCase().trim();
-    final lowQuery = query.toLowerCase();
+    if (lowerQuery.isEmpty && keywords.isEmpty) {
+      return trackerInfos;
+    }
     return trackerInfos.where((trackerInfo) {
+      final metadata = trackerInfo.metadata;
+      final process = metadata.process;
       final chains = trackerInfo.chains;
-      final process = trackerInfo.metadata.process;
-      final networkText = trackerInfo.metadata.network.toLowerCase();
-      final hostText = trackerInfo.metadata.host.toLowerCase();
-      final destinationIPText = trackerInfo.metadata.destinationIP
-          .toLowerCase();
-      final processText = trackerInfo.metadata.process.toLowerCase();
-      final chainsText = chains.join('').toLowerCase();
-      return {...chains, process}.containsAll(keywords) &&
-          (networkText.contains(lowerQuery) ||
-              hostText.contains(lowerQuery) ||
-              destinationIPText.contains(lowQuery) ||
-              processText.contains(lowerQuery) ||
-              chainsText.contains(lowerQuery));
+      if (keywords.isNotEmpty) {
+        for (final keyword in keywords) {
+          if (keyword != process && !chains.contains(keyword)) {
+            return false;
+          }
+        }
+      }
+      if (lowerQuery.isEmpty) {
+        return true;
+      }
+      return metadata.network.toLowerCase().contains(lowerQuery) ||
+          metadata.host.toLowerCase().contains(lowerQuery) ||
+          metadata.destinationIP.toLowerCase().contains(lowerQuery) ||
+          process.toLowerCase().contains(lowerQuery) ||
+          chains.any((chain) => chain.toLowerCase().contains(lowerQuery));
     }).toList();
   }
 }

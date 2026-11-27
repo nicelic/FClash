@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -888,5 +889,82 @@ func TestHandleGetProxiesSeesAProviderUpdate(t *testing.T) {
 	}
 	if _, exist := data.Proxies["node-a"]; exist {
 		t.Error("a proxy the refresh removed is still reported")
+	}
+}
+
+func TestResolveMihomoVersion(t *testing.T) {
+	noInfo := func() (*debug.BuildInfo, bool) { return nil, false }
+
+	t.Run("prefers replaced module version from build info", func(t *testing.T) {
+		got := resolveMihomoVersion("1.10.0", func() (*debug.BuildInfo, bool) {
+			return &debug.BuildInfo{
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/metacubex/mihomo",
+						Version: "v1.19.34",
+						Replace: &debug.Module{
+							Path:    "github.com/metacubex/mihomo",
+							Version: "v1.19.32",
+						},
+					},
+				},
+			}, true
+		})
+		if got != "v1.19.32" {
+			t.Fatalf("got %q, want %q", got, "v1.19.32")
+		}
+	})
+
+	t.Run("uses direct module version from build info", func(t *testing.T) {
+		got := resolveMihomoVersion("1.10.0", func() (*debug.BuildInfo, bool) {
+			return &debug.BuildInfo{
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/metacubex/mihomo",
+						Version: "v1.19.34",
+					},
+				},
+			}, true
+		})
+		if got != "v1.19.34" {
+			t.Fatalf("got %q, want %q", got, "v1.19.34")
+		}
+	})
+
+	t.Run("falls back to ldflags version when build info lacks one", func(t *testing.T) {
+		got := resolveMihomoVersion("v1.19.32", noInfo)
+		if got != "v1.19.32" {
+			t.Fatalf("got %q, want %q", got, "v1.19.32")
+		}
+	})
+
+	t.Run("ignores default uninjected mihomo version", func(t *testing.T) {
+		if got := resolveMihomoVersion("1.10.0", noInfo); got != "" {
+			t.Fatalf("got %q, want empty string", got)
+		}
+	})
+}
+
+func TestHandleGetCoreVersionMatchesBuildInfo(t *testing.T) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		t.Fatal("debug.ReadBuildInfo() returned false")
+	}
+	var want string
+	for _, dep := range info.Deps {
+		if dep.Path == "github.com/metacubex/mihomo" {
+			if dep.Replace != nil && dep.Replace.Version != "" {
+				want = dep.Replace.Version
+			} else {
+				want = dep.Version
+			}
+			break
+		}
+	}
+	if want == "" {
+		t.Fatal("mihomo dependency missing from build info")
+	}
+	if got := handleGetCoreVersion(); got != want {
+		t.Fatalf("handleGetCoreVersion() = %q, want %q", got, want)
 	}
 }

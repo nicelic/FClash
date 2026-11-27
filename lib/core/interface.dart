@@ -19,6 +19,8 @@ mixin CoreInterface {
 
   Future<bool> get isInit;
 
+  Future<String> getCoreVersion();
+
   Future<bool> forceGc();
 
   Future<String> validateConfig(String path);
@@ -143,6 +145,11 @@ abstract class CoreHandlerInterface with CoreInterface {
   @override
   Future<bool> get isInit async {
     return await _invokeMethod<bool>(method: CoreMethod.getIsInit) ?? false;
+  }
+
+  @override
+  Future<String> getCoreVersion() async {
+    return await _invokeMethod<String>(method: CoreMethod.getCoreVersion) ?? '';
   }
 
   @override

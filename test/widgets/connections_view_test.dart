@@ -181,6 +181,117 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('ConnectionsView continues polling while the app is inactive', (
+    tester,
+  ) async {
+    var readCount = 0;
+
+    Future<List<TrackerInfo>> readConnections() async {
+      readCount++;
+      return const [];
+    }
+
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpConnections(tester, connectionsReader: readConnections);
+    await tester.pump();
+
+    expect(readCount, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(readCount, 2);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(readCount, 3);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(seconds: 3));
+    expect(readCount, 3);
+    expect(tester.takeException(), null);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('ConnectionsView renders live speeds while unfocused', (
+    tester,
+  ) async {
+    var nowMs = 1000;
+    var pollIndex = 0;
+    final baseUpload = (27.8 * 1024 * 1024).round();
+    final baseDownload = (6.5 * 1024 * 1024).round();
+
+    Future<List<TrackerInfo>> readConnections() async {
+      pollIndex++;
+      final extraUp = pollIndex >= 2 ? 128 * 1024 : 0;
+      final extraDown = pollIndex >= 2 ? (2.4 * 1024 * 1024).round() : 0;
+      return [
+        TrackerInfo(
+          id: 'conn-1',
+          upload: baseUpload + extraUp,
+          download: baseDownload + extraDown,
+          start: DateTime(2026),
+          metadata: const Metadata(
+            network: 'tcp',
+            host: 'example.com',
+            destinationPort: '443',
+          ),
+          chains: const ['Proxy'],
+          rule: 'MATCH',
+          rulePayload: '',
+        ),
+      ];
+    }
+
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: _TestApp(
+          child: PageActivityScope(
+            isActive: true,
+            child: ConnectionsView(
+              connectionsReader: readConnections,
+              speedNowMs: () => nowMs,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.textContaining('0B/s ↑ 0B/s ↓ (27.8MB / 6.5MB)'),
+      findsOneWidget,
+    );
+
+    nowMs = 2000;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(find.textContaining('128KB/s ↑ 2.4MB/s ↓'), findsOneWidget);
+    expect(tester.takeException(), null);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 class _TestApp extends StatelessWidget {

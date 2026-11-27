@@ -41,6 +41,18 @@ class AboutView extends ConsumerWidget {
       separated: false,
       title: appLocalizations.more,
       items: [
+        Consumer(
+          builder: (_, ref, _) {
+            final coreVersion = ref.watch(coreVersionProvider).value ?? '';
+            return ListItem(
+              title: Text(appLocalizations.coreVersion),
+              trailing: Text(
+                coreVersion.isEmpty ? '--' : coreVersion,
+                style: context.textTheme.bodyMedium?.toLight,
+              ),
+            );
+          },
+        ),
         ListItem(
           title: Text(appLocalizations.checkUpdate),
           onTap: () {

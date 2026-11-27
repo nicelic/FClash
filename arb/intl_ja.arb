@@ -623,5 +623,10 @@
   "networkInterface": "ネットワークインターフェース",
   "congestionController": "輻輳制御",
   "mtu": "MTU",
-  "mtuTip": "MTUは{min}から{max}の間の整数である必要があります"
+  "mtuTip": "MTUは{min}から{max}の間の整数である必要があります",
+  "coreVersion": "コアバージョン",
+  "sortBySpeed": "速度順で並び替え",
+  "sortByTraffic": "トラフィック順で並び替え",
+  "sortByTime": "時間順で並び替え",
+  "sortByDefaultTime": "デフォルト(時間)"
 }

@@ -297,6 +297,8 @@ class CommonPopupMenuItem {
   const CommonPopupMenuItem({
     required this.label,
     this.icon,
+    this.trailing,
+    this.selected = false,
     this.onPressed,
     this.danger = false,
     this.subItems = const [],
@@ -304,6 +306,8 @@ class CommonPopupMenuItem {
 
   final String label;
   final IconData? icon;
+  final Widget? trailing;
+  final bool selected;
   final VoidCallback? onPressed;
   final bool danger;
   final List<CommonPopupMenuItem> subItems;
@@ -501,7 +505,11 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
   }) {
     final colorScheme = context.colorScheme;
     final enabled = onTap != null;
-    final color = item.danger ? colorScheme.error : colorScheme.onSurface;
+    final color = item.danger
+        ? colorScheme.error
+        : item.selected
+        ? colorScheme.primary
+        : colorScheme.onSurface;
     final foregroundColor = enabled ? color : color.opacity30;
     Widget? arrow;
     if (item.subItems.isNotEmpty) {
@@ -514,6 +522,16 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
         arrow = RotationTransition(turns: arrowTurns, child: arrow);
       }
     }
+    final trailing = arrow == null
+        ? item.trailing ??
+              (item.selected
+                  ? Icon(
+                      Icons.check,
+                      size: _itemIconSize,
+                      color: foregroundColor,
+                    )
+                  : null)
+        : null;
     final child = InkWell(
       customBorder: const RoundedSuperellipseBorder(
         borderRadius: BorderRadius.all(Radius.circular(_itemRadius)),
@@ -536,10 +554,12 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
                 overflow: TextOverflow.ellipsis,
                 style: context.textTheme.bodyMedium?.copyWith(
                   color: foregroundColor,
+                  fontWeight: item.selected ? FontWeight.w600 : null,
                 ),
               ),
             ),
             if (arrow != null) ...[const SizedBox(width: 8), arrow],
+            if (trailing != null) ...[const SizedBox(width: 12), trailing],
           ],
         ),
       ),

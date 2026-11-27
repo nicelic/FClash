@@ -68,6 +68,35 @@ func handleGetIsInit() bool {
 	return isInit.Load()
 }
 
+func resolveMihomoVersion(injectedVersion string, readBuildInfo func() (*debug.BuildInfo, bool)) string {
+	if info, ok := readBuildInfo(); ok {
+		for _, dep := range info.Deps {
+			if dep.Path != "github.com/metacubex/mihomo" {
+				continue
+			}
+			if dep.Replace != nil {
+				if dep.Replace.Version != "" && dep.Replace.Version != "(devel)" {
+					return dep.Replace.Version
+				}
+				break
+			}
+			if dep.Version != "" && dep.Version != "(devel)" {
+				return dep.Version
+			}
+		}
+	}
+	if injectedVersion != "" &&
+		injectedVersion != "1.10.0" &&
+		injectedVersion != "unknown version" {
+		return injectedVersion
+	}
+	return ""
+}
+
+func handleGetCoreVersion() string {
+	return resolveMihomoVersion(constant.Version, debug.ReadBuildInfo)
+}
+
 func handleForceGC() {
 	log.Infoln("[APP] request force GC")
 	invalidateAllProxies()

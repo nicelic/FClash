@@ -184,6 +184,65 @@ void main() {
 
       expect(trackerInfo.desc, 'tcp://example.com/1.1.1.1:443');
       expect(trackerInfo.progressText, 'Browser(501)');
+      expect(trackerInfo.trafficSummary, '0B ↑ 0B ↓');
+
+      final withSpeed = trackerInfo.copyWith(
+        upload: (27.8 * 1024 * 1024).round(),
+        download: (6.5 * 1024 * 1024).round(),
+        uploadSpeed: 128 * 1024,
+        downloadSpeed: (2.4 * 1024 * 1024).round(),
+      );
+      expect(
+        withSpeed.trafficSummary,
+        '128KB/s ↑ 2.4MB/s ↓ (27.8MB / 6.5MB)',
+      );
+    });
+  });
+
+  group('TrackerInfosStateExt', () {
+    test('filters by trimmed query and keywords across process and chains', () {
+      final items = [
+        TrackerInfo(
+          id: '1',
+          start: DateTime(2026),
+          metadata: const Metadata(
+            network: 'tcp',
+            host: 'api.telegram.org',
+            destinationIP: '149.154.167.50',
+            destinationPort: '443',
+            process: 'Telegram.exe',
+          ),
+          chains: const ['ProxyA', 'Group1'],
+          rule: 'MATCH',
+          rulePayload: '',
+        ),
+        TrackerInfo(
+          id: '2',
+          start: DateTime(2026),
+          metadata: const Metadata(
+            network: 'udp',
+            host: 'dns.google',
+            destinationIP: '8.8.8.8',
+            destinationPort: '53',
+            process: 'chrome.exe',
+          ),
+          chains: const ['DIRECT'],
+          rule: 'MATCH',
+          rulePayload: '',
+        ),
+      ];
+
+      final byQuery = TrackerInfosState(
+        trackerInfos: items,
+        query: '  telegram.exe ',
+      ).list;
+      expect(byQuery.map((e) => e.id), ['1']);
+
+      final byKeywords = TrackerInfosState(
+        trackerInfos: items,
+        keywords: const ['ProxyA', 'Telegram.exe'],
+      ).list;
+      expect(byKeywords.map((e) => e.id), ['1']);
     });
   });
 

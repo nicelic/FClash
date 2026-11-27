@@ -218,6 +218,10 @@ class CoreController {
     return _interface.getTotalTraffic(onlyStatisticsProxy);
   }
 
+  Future<String> getCoreVersion() async {
+    return _interface.getCoreVersion();
+  }
+
   Future<int> getMemory() async {
     return _interface.getMemory();
   }

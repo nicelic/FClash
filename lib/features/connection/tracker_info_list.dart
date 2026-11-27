@@ -1,6 +1,7 @@
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
 
@@ -49,6 +50,7 @@ class TrackerInfoList extends StatelessWidget {
   final bool shrinkWrap;
   final ScrollPhysics? physics;
   final EdgeInsetsGeometry? padding;
+  final bool? showProcess;
   final Widget? Function(TrackerInfo trackerInfo)? trailingBuilder;
 
   const TrackerInfoList({
@@ -60,6 +62,7 @@ class TrackerInfoList extends StatelessWidget {
     this.shrinkWrap = false,
     this.physics,
     this.padding,
+    this.showProcess,
     this.trailingBuilder,
   });
 
@@ -77,6 +80,7 @@ class TrackerInfoList extends StatelessWidget {
         context,
         trackerInfos[index],
         detailTitle: detailTitle,
+        showProcess: showProcess,
         trailingBuilder: trailingBuilder,
       ),
     );
@@ -87,17 +91,27 @@ class TrackerInfoList extends StatelessWidget {
 /// connections collapse out and surviving rows slide to their new slot.
 class TrackerInfoAnimatedList extends StatelessWidget {
   final List<TrackerInfo> trackerInfos;
+  final ValueListenable<List<TrackerInfo>>? itemsListenable;
+  final ValueListenable<TrackerInfosState>? detailStateListenable;
+  final ValueListenable<int>? relativeTimeListenable;
   final String detailTitle;
   final ScrollController? controller;
   final EdgeInsetsGeometry? padding;
+  final bool? showProcess;
+  final bool animateMoves;
   final Widget? Function(TrackerInfo trackerInfo)? trailingBuilder;
 
   const TrackerInfoAnimatedList({
     super.key,
     required this.trackerInfos,
+    this.itemsListenable,
+    this.detailStateListenable,
+    this.relativeTimeListenable,
     required this.detailTitle,
     this.controller,
     this.padding,
+    this.showProcess,
+    this.animateMoves = true,
     this.trailingBuilder,
   });
 
@@ -107,13 +121,18 @@ class TrackerInfoAnimatedList extends StatelessWidget {
       controller: controller,
       padding: padding,
       items: trackerInfos,
+      itemsListenable: itemsListenable,
       keyOf: (trackerInfo) => trackerInfo.id,
+      animateMoves: animateMoves,
       separator: const Divider(height: 0),
       itemBuilder: (context, trackerInfo) => _buildTrackerInfoItem(
         context,
         trackerInfo,
         detailTitle: detailTitle,
+        showProcess: showProcess,
         trailingBuilder: trailingBuilder,
+        detailStateListenable: detailStateListenable,
+        relativeTimeListenable: relativeTimeListenable,
       ),
     );
   }
@@ -124,6 +143,9 @@ Widget _buildTrackerInfoItem(
   TrackerInfo trackerInfo, {
   required String detailTitle,
   required Widget? Function(TrackerInfo trackerInfo)? trailingBuilder,
+  bool? showProcess,
+  ValueListenable<TrackerInfosState>? detailStateListenable,
+  ValueListenable<int>? relativeTimeListenable,
 }) {
   return TrackerInfoItem(
     key: Key(trackerInfo.id),
@@ -131,7 +153,10 @@ Widget _buildTrackerInfoItem(
     onClickKeyword: (value) {
       context.commonScaffoldState?.addKeyword(value);
     },
+    showProcess: showProcess,
     trailing: trailingBuilder?.call(trackerInfo),
     detailTitle: detailTitle,
+    detailStateListenable: detailStateListenable,
+    relativeTimeListenable: relativeTimeListenable,
   );
 }

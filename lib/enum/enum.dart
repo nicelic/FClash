@@ -170,6 +170,47 @@ enum AccessControlMode { acceptSelected, rejectSelected }
 
 enum AccessSortType { none, name, time }
 
+enum ConnectionSortCategory { speed, traffic, time, defaultTime }
+
+enum ConnectionSortMode {
+  defaultTimeDesc(ConnectionSortCategory.defaultTime, true),
+  defaultTimeAsc(ConnectionSortCategory.defaultTime, false),
+  speedDesc(ConnectionSortCategory.speed, true),
+  speedAsc(ConnectionSortCategory.speed, false),
+  trafficDesc(ConnectionSortCategory.traffic, true),
+  trafficAsc(ConnectionSortCategory.traffic, false),
+  timeDesc(ConnectionSortCategory.time, true),
+  timeAsc(ConnectionSortCategory.time, false);
+
+  final ConnectionSortCategory category;
+  final bool descending;
+
+  const ConnectionSortMode(this.category, this.descending);
+
+  ConnectionSortMode selectCategory(ConnectionSortCategory target) {
+    if (category == target) {
+      return _byCategory(target, !descending);
+    }
+    return _byCategory(target, true);
+  }
+
+  static ConnectionSortMode _byCategory(
+    ConnectionSortCategory category,
+    bool descending,
+  ) {
+    return switch ((category, descending)) {
+      (ConnectionSortCategory.defaultTime, true) => defaultTimeDesc,
+      (ConnectionSortCategory.defaultTime, false) => defaultTimeAsc,
+      (ConnectionSortCategory.speed, true) => speedDesc,
+      (ConnectionSortCategory.speed, false) => speedAsc,
+      (ConnectionSortCategory.traffic, true) => trafficDesc,
+      (ConnectionSortCategory.traffic, false) => trafficAsc,
+      (ConnectionSortCategory.time, true) => timeDesc,
+      (ConnectionSortCategory.time, false) => timeAsc,
+    };
+  }
+}
+
 enum ProfileType { file, url }
 
 enum ResultType {

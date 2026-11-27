@@ -197,4 +197,25 @@ void main() {
       expect(await App().requestInstalledAppsPermission(), isFalse);
     },
   );
+
+  test('evicts oldest cached package icons once cache reaches limit', () async {
+    var iconCallCount = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          iconCallCount++;
+          return '/icons/${call.arguments['packageName']}.png';
+        });
+
+    final app = App();
+    for (var i = 0; i <= App.maxPackageIconCacheSize; i++) {
+      await app.getPackageIcon('com.pkg.$i');
+    }
+
+    expect(iconCallCount, App.maxPackageIconCacheSize + 1);
+    expect(app.hasPackageIcon('com.pkg.0'), isFalse);
+    expect(
+      app.hasPackageIcon('com.pkg.${App.maxPackageIconCacheSize}'),
+      isTrue,
+    );
+  });
 }

@@ -623,5 +623,10 @@
   "networkInterface": "Сетевой интерфейс",
   "congestionController": "Управление перегрузкой",
   "mtu": "MTU",
-  "mtuTip": "Значение MTU должно быть от {min} до {max}"
+  "mtuTip": "Значение MTU должно быть от {min} до {max}",
+  "coreVersion": "Версия ядра",
+  "sortBySpeed": "По скорости",
+  "sortByTraffic": "По трафику",
+  "sortByTime": "По времени",
+  "sortByDefaultTime": "По умолчанию (время)"
 }

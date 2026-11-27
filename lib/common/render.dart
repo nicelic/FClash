@@ -17,6 +17,7 @@ class Render {
   }
 
   void active() {
+    if (!_isPaused) return;
     resume();
     pause();
   }

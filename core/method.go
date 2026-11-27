@@ -162,6 +162,9 @@ var methodHandlers = map[CoreMethod]methodHandler{
 	getIsInitMethod: withoutArguments(func(response MethodResponse) {
 		response.success(handleGetIsInit())
 	}),
+	getCoreVersionMethod: withoutArguments(func(response MethodResponse) {
+		response.success(handleGetCoreVersion())
+	}),
 	forceGcMethod: withoutArguments(func(response MethodResponse) {
 		handleForceGC()
 		response.success(true)

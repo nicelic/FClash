@@ -89,6 +89,9 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(true) bool showTrayTitle,
     @Default(true) bool checkCertificate,
     @Default('') String customUserAgent,
+    @Default(ConnectionSortMode.defaultTimeDesc)
+    @JsonKey(unknownEnumValue: ConnectionSortMode.defaultTimeDesc)
+    ConnectionSortMode connectionSortMode,
   }) = _AppSettingProps;
 
   factory AppSettingProps.fromJson(Map<String, Object?> json) =>
