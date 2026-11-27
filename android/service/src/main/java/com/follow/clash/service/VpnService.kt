@@ -17,6 +17,8 @@ import com.follow.clash.service.models.CIDR
 import com.follow.clash.service.models.VpnOptions
 import com.follow.clash.service.models.getIpv4RouteAddress
 import com.follow.clash.service.models.getIpv6RouteAddress
+import com.follow.clash.service.models.resolvedCongestionController
+import com.follow.clash.service.models.resolvedMtu
 import com.follow.clash.service.models.toCIDR
 import com.follow.clash.service.modules.ServiceModules
 import java.net.InetSocketAddress
