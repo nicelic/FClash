@@ -60,6 +60,32 @@ jobs:
       - name: Run tests
         run: flutter test --reporter expanded
 
+      - name: Warn if committed generated files are out of date
+        run: |
+          if [ -n "$(git status --porcelain -- lib/l10n lib/models/generated lib/providers/generated lib/database/generated)" ]; then
+            echo '::warning::Committed generated Dart or l10n files are out of date. Reusing freshly generated files for release builds.'
+            git status --short -- lib/l10n lib/models/generated lib/providers/generated lib/database/generated
+          fi
+
+      - name: Stage generated Dart and l10n files
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p .generated_artifact/root
+          for dir in lib/l10n lib/models/generated lib/providers/generated lib/database/generated; do
+            if [ -d "$dir" ]; then
+              cp -a --parents "$dir" .generated_artifact/root/
+            fi
+          done
+
+      - name: Upload generated Dart and l10n files
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-dart
+          path: .generated_artifact/root
+          overwrite: true
+          retention-days: 1
+
   plugins:
     name: Plugins
     runs-on: ubuntu-latest
@@ -226,10 +252,169 @@ jobs:
       - name: Run Windows service tests
         run: cargo test --manifest-path services/helper/Cargo.toml --features windows-service
 
-  prepare-release:
+  build-android-arm64:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-android-arm:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: arm
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-android-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: android
+      os: ubuntu-latest
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-windows-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: windows
+      os: Windows-2022
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-windows-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: windows
+      os: windows-11-arm
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-linux-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: linux
+      os: ubuntu-22.04
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-linux-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: linux
+      os: ubuntu-24.04-arm
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-macos-arm64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: macos
+      os: macos-latest
+      arch: arm64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  build-macos-amd64:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ dart, plugins, go, android, rust, windows-helper-test ]
+    uses: ./.github/workflows/_package.yaml
+    with:
+      platform: macos
+      os: macos-15-intel
+      arch: amd64
+      flutter_channel: stable
+      flutter_version: '3.47.9'
+      go_version: '1.26.4'
+      ndk_version: r28c
+      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
+      use_generated_artifact: 'true'
+    secrets: inherit
+
+  prepare-release:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && (needs.build-android-arm64.result == 'success' || needs.build-android-arm.result == 'success' || needs.build-android-amd64.result == 'success' || needs.build-windows-amd64.result == 'success' || needs.build-windows-arm64.result == 'success' || needs.build-linux-amd64.result == 'success' || needs.build-linux-arm64.result == 'success' || needs.build-macos-arm64.result == 'success' || needs.build-macos-amd64.result == 'success') }}
     name: Prepare release
-    needs: [ dart, plugins, go, android, rust ]
+    needs:
+      - dart
+      - plugins
+      - go
+      - android
+      - rust
+      - windows-helper-test
+      - build-android-arm64
+      - build-android-arm
+      - build-android-amd64
+      - build-windows-amd64
+      - build-windows-arm64
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-macos-arm64
+      - build-macos-amd64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -251,134 +436,8 @@ jobs:
           generate_release_notes: true
           prerelease: true
 
-  build-android-arm64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: android
-      os: ubuntu-latest
-      arch: arm64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-android-arm:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: android
-      os: ubuntu-latest
-      arch: arm
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-android-amd64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: android
-      os: ubuntu-latest
-      arch: amd64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-windows-amd64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: windows
-      os: Windows-2022
-      arch: amd64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-windows-arm64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: windows
-      os: windows-11-arm
-      arch: arm64
-      flutter_channel: master
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-linux-amd64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: linux
-      os: ubuntu-22.04
-      arch: amd64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-linux-arm64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: linux
-      os: ubuntu-24.04-arm
-      arch: arm64
-      flutter_channel: master
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-macos-arm64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: macos
-      os: macos-latest
-      arch: arm64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
-  build-macos-amd64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/_package.yaml
-    with:
-      platform: macos
-      os: macos-15-intel
-      arch: amd64
-      flutter_channel: stable
-      flutter_version: '3.47.9'
-      go_version: '1.26.4'
-      ndk_version: r28c
-      is_stable: ${{ !contains(github.ref, '-') && 'true' || 'false' }}
-    secrets: inherit
-
   publish-android-arm64:
-    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-arm64 ]
+    needs: [ prepare-release, build-android-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -387,7 +446,7 @@ jobs:
     secrets: inherit
 
   publish-android-arm:
-    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-arm ]
+    needs: [ prepare-release, build-android-arm ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -396,7 +455,7 @@ jobs:
     secrets: inherit
 
   publish-android-amd64:
-    needs: [ prepare-release, dart, plugins, go, android, rust, build-android-amd64 ]
+    needs: [ prepare-release, build-android-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -405,7 +464,7 @@ jobs:
     secrets: inherit
 
   publish-windows-amd64:
-    needs: [ prepare-release, dart, plugins, go, rust, windows-helper-test, build-windows-amd64 ]
+    needs: [ prepare-release, build-windows-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -414,7 +473,7 @@ jobs:
     secrets: inherit
 
   publish-windows-arm64:
-    needs: [ prepare-release, dart, plugins, go, rust, windows-helper-test, build-windows-arm64 ]
+    needs: [ prepare-release, build-windows-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -423,7 +482,7 @@ jobs:
     secrets: inherit
 
   publish-linux-amd64:
-    needs: [ prepare-release, dart, plugins, go, rust, build-linux-amd64 ]
+    needs: [ prepare-release, build-linux-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -432,7 +491,7 @@ jobs:
     secrets: inherit
 
   publish-linux-arm64:
-    needs: [ prepare-release, dart, plugins, go, rust, build-linux-arm64 ]
+    needs: [ prepare-release, build-linux-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -441,7 +500,7 @@ jobs:
     secrets: inherit
 
   publish-macos-arm64:
-    needs: [ prepare-release, dart, plugins, go, rust, build-macos-arm64 ]
+    needs: [ prepare-release, build-macos-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write
@@ -450,7 +509,7 @@ jobs:
     secrets: inherit
 
   publish-macos-amd64:
-    needs: [ prepare-release, dart, plugins, go, rust, build-macos-amd64 ]
+    needs: [ prepare-release, build-macos-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
       contents: write

@@ -80,6 +80,10 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   die "working tree has uncommitted changes; commit or stash them first"
 fi
 
+if ((dry_run == 0)) && command -v flutter >/dev/null 2>&1; then
+  flutter analyze --no-fatal-infos || die "flutter analyze failed; fix Dart or generated code errors before releasing"
+fi
+
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$branch" != "HEAD" ]] || die "detached HEAD; check out a branch first"
 if [[ "$branch" != "main" ]]; then

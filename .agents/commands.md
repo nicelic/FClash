@@ -260,8 +260,9 @@ directories: `plugins` (local Flutter packages and the setup build tool), `go`
 (JVM unit tests for `:common`, `:service` and `:app`, with the Flutter compile
 tasks excluded so no native build hook runs), `rust` (both crates), and a
 Windows runner for the helper's `windows-service` feature. On tag pushes,
-packaging jobs run in parallel with checks, verify their artifacts locally, and
-publish incrementally to the GitHub Release as soon as their checks pass.
+packaging jobs wait for all six check jobs to pass, consume the `generated-dart`
+artifact from `dart`, verify their artifacts locally, and publish incrementally
+to the GitHub Release once at least one package succeeds.
 
 `bash tool/check_plugins.sh` is that plugin gate, and CI runs the same script.
 It discovers every `plugins/*/pubspec.yaml`, analyzes each package, and runs
