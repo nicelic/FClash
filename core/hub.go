@@ -19,6 +19,7 @@ import (
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/common/observable"
 	"github.com/metacubex/mihomo/common/utils"
+	"github.com/metacubex/mihomo/component/iface"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/updater"
 	"github.com/metacubex/mihomo/config"
@@ -636,6 +637,52 @@ func handleStopLog() {
 
 func handleGetMemory() uint64 {
 	return statistic.DefaultManager.Memory()
+}
+
+func handleGetInterfaces() []string {
+	iface.FlushCache()
+	ifaces, err := iface.Interfaces()
+	if err != nil {
+		return []string{}
+	}
+	configMu.Lock()
+	tunDevice := ""
+	if currentConfig != nil && currentConfig.General != nil {
+		tunDevice = currentConfig.General.Tun.Device
+	}
+	configMu.Unlock()
+	return filterPhysicalInterfaces(ifaces, tunDevice)
+}
+
+func filterPhysicalInterfaces(ifaces map[string]*iface.Interface, tunDevice string) []string {
+	names := make([]string, 0, len(ifaces))
+	for _, entry := range ifaces {
+		if entry == nil || entry.Name == "" || (tunDevice != "" && entry.Name == tunDevice) {
+			continue
+		}
+		if entry.Flags&net.FlagUp == 0 ||
+			entry.Flags&net.FlagLoopback != 0 ||
+			entry.Flags&net.FlagPointToPoint != 0 {
+			continue
+		}
+		if len(entry.HardwareAddr) == 0 {
+			continue
+		}
+		hasIP := false
+		for _, addr := range entry.Addresses {
+			ip := addr.Addr()
+			if ip.IsValid() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+				hasIP = true
+				break
+			}
+		}
+		if !hasIP {
+			continue
+		}
+		names = append(names, entry.Name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func handleGetConfig(path string) (*config.RawConfig, error) {

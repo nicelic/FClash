@@ -4,6 +4,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/widgets/inherited.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'card.dart';
@@ -90,6 +91,7 @@ final class _InputAction extends _ListItemAction {
   final ValueChanged<String?> onChanged;
   final FormFieldValidator<String>? validator;
   final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
   final TextInputType? keyboardType;
   final String? resetValue;
 
@@ -101,6 +103,7 @@ final class _InputAction extends _ListItemAction {
     this.resetValue,
     this.validator,
     this.maxLength,
+    this.inputFormatters,
     this.keyboardType,
   });
 }
@@ -237,6 +240,7 @@ class ListItem<T> extends StatelessWidget {
     required ValueChanged<String?> onChanged,
     FormFieldValidator<String>? validator,
     int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
     TextInputType? keyboardType,
     String? resetValue,
     this.horizontalTitleGap,
@@ -255,6 +259,7 @@ class ListItem<T> extends StatelessWidget {
          onChanged: onChanged,
          validator: validator,
          maxLength: maxLength,
+         inputFormatters: inputFormatters,
          keyboardType: keyboardType,
          resetValue: resetValue,
        ),
@@ -426,9 +431,11 @@ class ListItem<T> extends StatelessWidget {
                 value: inputDelegate.value,
                 suffixText: inputDelegate.suffixText,
                 resetValue: inputDelegate.resetValue,
-                inputFormatters: inputDelegate.maxLength == null
-                    ? null
-                    : TextInputLimits.limit(inputDelegate.maxLength!),
+                inputFormatters:
+                    inputDelegate.inputFormatters ??
+                    (inputDelegate.maxLength == null
+                        ? null
+                        : TextInputLimits.limit(inputDelegate.maxLength!)),
                 keyboardType: inputDelegate.keyboardType,
                 validator: inputDelegate.validator,
               ),

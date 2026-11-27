@@ -289,5 +289,11 @@ void main() {
       final result = await controller.clearEffect(42);
       expect(result, 'ok');
     });
+
+    test('getInterfaces delegates', () async {
+      when(() => mock.getInterfaces()).thenAnswer((_) async => ['eth0', 'wlan0']);
+      final result = await controller.getInterfaces();
+      expect(result, ['eth0', 'wlan0']);
+    });
   });
 }

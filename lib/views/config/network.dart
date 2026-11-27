@@ -1,7 +1,9 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -191,6 +193,179 @@ class TunStackItem extends ConsumerWidget {
   }
 }
 
+class TunAutoRouteItem extends ConsumerWidget {
+  const TunAutoRouteItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    return ConfigToggleItem(
+      title: (l) => l.autoRoute,
+      selector: patchClashConfigProvider.select((state) => state.tun.autoRoute),
+      onChanged: _tunWriter(
+        (state, value) => state.copyWith.tun(autoRoute: value),
+      ),
+    );
+  }
+}
+
+class TunStrictRouteItem extends ConsumerWidget {
+  const TunStrictRouteItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    return ConfigToggleItem(
+      title: (l) => l.strictRoute,
+      selector: patchClashConfigProvider.select(
+        (state) => state.tun.strictRoute,
+      ),
+      onChanged: _tunWriter(
+        (state, value) => state.copyWith.tun(strictRoute: value),
+      ),
+    );
+  }
+}
+
+class TunDnsHijackItem extends ConsumerWidget {
+  const TunDnsHijackItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    return ConfigToggleItem(
+      title: (l) => l.dnsHijacking,
+      selector: patchClashConfigProvider.select(
+        (state) => state.tun.dnsHijack.isNotEmpty,
+      ),
+      onChanged: _tunWriter(
+        (state, value) => state.copyWith.tun(
+          dnsHijack: value ? defaultTunDnsHijack : const [],
+        ),
+      ),
+    );
+  }
+}
+
+class TunCongestionControllerItem extends ConsumerWidget {
+  const TunCongestionControllerItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    final stack = ref.watch(
+      patchClashConfigProvider.select((state) => state.tun.stack),
+    );
+    if (stack != TunStack.mips) {
+      return const SizedBox.shrink();
+    }
+    return ConfigOptionsItem<TunCongestionController>(
+      title: (l) => l.congestionController,
+      options: TunCongestionController.values,
+      textBuilder: (controller) => controller.name,
+      selector: patchClashConfigProvider.select(
+        (state) => state.tun.congestionController,
+      ),
+      onChanged: _tunWriter(
+        (state, value) => state.copyWith.tun(congestionController: value),
+      ),
+    );
+  }
+}
+
+class TunMtuItem extends ConsumerWidget {
+  const TunMtuItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    return ConfigTextItem(
+      title: (l) => l.mtu,
+      keyboardType: TextInputType.number,
+      inputFormatters: TextInputLimits.digitsOnly(4),
+      resetValue: '$defaultTunMtu',
+      normalize: (value) => value.trim(),
+      validator: (value, l) {
+        final mtu = int.tryParse(value ?? '');
+        if (mtu == null || mtu < minTunMtu || mtu > maxTunMtu) {
+          return l.mtuTip(minTunMtu, maxTunMtu);
+        }
+        return null;
+      },
+      selector: patchClashConfigProvider.select(
+        (state) => state.tun.mtu.toString(),
+      ),
+      onChanged: _tunWriter(
+        (state, value) => state.copyWith.tun(
+          mtu: int.tryParse(value) ?? defaultTunMtu,
+        ),
+      ),
+    );
+  }
+}
+
+class TunInterfaceItem extends ConsumerWidget {
+  const TunInterfaceItem({super.key});
+
+  @override
+  Widget build(BuildContext context, ref) {
+    final appLocalizations = context.appLocalizations;
+    final state = ref.watch(
+      patchClashConfigProvider.select(
+        (state) => (mode: state.interfaceNameMode, name: state.interfaceName),
+      ),
+    );
+    final selected = switch (state.mode) {
+      InterfaceNameMode.clear => '',
+      InterfaceNameMode.follow => null,
+      InterfaceNameMode.custom => state.name,
+    };
+    final subtitle = switch (state.mode) {
+      InterfaceNameMode.clear => appLocalizations.auto,
+      InterfaceNameMode.follow => appLocalizations.interfaceNameModeFollow,
+      InterfaceNameMode.custom =>
+        state.name.isEmpty ? appLocalizations.auto : state.name,
+    };
+    return ListItem(
+      title: Text(appLocalizations.networkInterface),
+      subtitle: Text(subtitle),
+      onTap: () async {
+        final isInit = ref.read(initProvider);
+        final detected = await getPhysicalInterfaceNames(
+          fetchFromCore: isInit
+              ? ref.read(coreHandlerProvider).getInterfaces
+              : null,
+        );
+        final current = selected ?? '';
+        final options = <String>[
+          '',
+          ...detected,
+          if (current.isNotEmpty && !detected.contains(current)) current,
+        ];
+        final value = await dialogs.showCommonDialog<String>(
+          child: OptionsDialog<String>(
+            title: appLocalizations.networkInterface,
+            options: options,
+            value: current,
+            textBuilder: (item) => item.isEmpty ? appLocalizations.auto : item,
+          ),
+        );
+        if (value == null || !context.mounted) {
+          return;
+        }
+        ref.read(patchClashConfigProvider.notifier).update((state) {
+          if (value.isEmpty) {
+            return state.copyWith(
+              interfaceNameMode: InterfaceNameMode.clear,
+              interfaceName: '',
+              tun: state.tun.copyWith(autoDetectInterface: true),
+            );
+          }
+          return state.copyWith(
+            interfaceNameMode: InterfaceNameMode.custom,
+            interfaceName: value,
+          );
+        });
+      },
+    );
+  }
+}
+
 class InterfaceNameModeItem extends ConsumerWidget {
   const InterfaceNameModeItem({super.key});
 
@@ -310,10 +485,16 @@ List<Widget> networkOptionsItems({
     if (isDesktop) const TUNItem(),
     if (isMacOS) const AutoSetSystemDnsItem(),
     const TunStackItem(),
+    const TunCongestionControllerItem(),
+    const TunMtuItem(),
     // mihomo's DefaultSocketHook ignores interface-name on Android
     // (core/lib.go installHooks, vendored dialer.go), so these rows only
     // apply on desktop.
     if (isDesktop) ...[
+      const TunAutoRouteItem(),
+      const TunStrictRouteItem(),
+      const TunDnsHijackItem(),
+      const TunInterfaceItem(),
       const InterfaceNameModeItem(),
       const InterfaceNameItem(),
     ],

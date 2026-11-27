@@ -483,6 +483,46 @@ void main() {
     });
   });
 
+  group('makeRealProfileTask tun fields', () {
+    test('serializes extended tun options to config yaml', () async {
+      final result = await makeRealProfileTask(
+        const MakeRealProfileState(
+          profilesPath: '/profiles',
+          profileId: 13,
+          rawConfig: {},
+          realPatchConfig: PatchClashConfig(
+            tun: Tun(
+              enable: true,
+              stack: TunStack.mips,
+              autoRoute: false,
+              autoDetectInterface: true,
+              strictRoute: true,
+              congestionController: TunCongestionController.bbr3,
+              mtu: 1500,
+              dnsHijack: defaultTunDnsHijack,
+            ),
+          ),
+          overrideDns: false,
+          appendSystemDns: false,
+          proxyGroups: [],
+          rules: [],
+          addedRules: [],
+          defaultUA: 'FlClash-Test',
+        ),
+      );
+      final config = loadYaml(result.yaml) as YamlMap;
+      final tun = config['tun'] as YamlMap;
+
+      expect(tun['stack'], 'mips');
+      expect(tun['auto-route'], isFalse);
+      expect(tun['auto-detect-interface'], isTrue);
+      expect(tun['strict-route'], isTrue);
+      expect(tun['congestion-controller'], 'bbr3');
+      expect(tun['mtu'], 1500);
+      expect(tun['dns-hijack'], ['any:53', 'tcp://any:53']);
+    });
+  });
+
   group('makeRealProfileTask legacy provider file migration', () {
     late Directory tempDir;
     const url = 'https://example.com/proxy.yaml';

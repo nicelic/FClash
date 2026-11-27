@@ -47,6 +47,37 @@ void main() {
       expect(params.mode, Mode.rule);
       expect(params.logLevel, LogLevel.info);
     });
+
+    test('serializes interface-name only when present', () {
+      const withInterface = UpdateParams(
+        tun: Tun(),
+        mixedPort: 7890,
+        allowLan: false,
+        findProcessMode: FindProcessMode.always,
+        mode: Mode.rule,
+        logLevel: LogLevel.error,
+        ipv6: false,
+        tcpConcurrent: true,
+        interfaceName: 'eth0',
+        externalController: ExternalControllerStatus.close,
+        unifiedDelay: true,
+      );
+      expect(withInterface.toJson()['interface-name'], 'eth0');
+
+      const withoutInterface = UpdateParams(
+        tun: Tun(),
+        mixedPort: 7890,
+        allowLan: false,
+        findProcessMode: FindProcessMode.always,
+        mode: Mode.rule,
+        logLevel: LogLevel.error,
+        ipv6: false,
+        tcpConcurrent: true,
+        externalController: ExternalControllerStatus.close,
+        unifiedDelay: true,
+      );
+      expect(withoutInterface.toJson().containsKey('interface-name'), isFalse);
+    });
   });
 
   group('InitParams', () {

@@ -12,6 +12,9 @@ data class AccessControlProps(
     val rejectList: List<String>,
 )
 
+private const val MIN_TUN_MTU = 1280
+private const val DEFAULT_TUN_MTU = 9000
+
 data class VpnOptions(
     val enable: Boolean,
     val port: Int,
@@ -23,7 +26,15 @@ data class VpnOptions(
     val bypassDomain: List<String>,
     val stack: String,
     val routeAddress: List<String>,
+    val congestionController: String? = "cubic",
+    val mtu: Int = DEFAULT_TUN_MTU,
 )
+
+fun VpnOptions.resolvedMtu(): Int =
+    mtu.takeIf { it in MIN_TUN_MTU..DEFAULT_TUN_MTU } ?: DEFAULT_TUN_MTU
+
+fun VpnOptions.resolvedCongestionController(): String =
+    congestionController.orEmpty()
 
 data class CIDR(
     val address: InetAddress,

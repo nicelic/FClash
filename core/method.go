@@ -267,6 +267,11 @@ var methodHandlers = map[CoreMethod]methodHandler{
 			response.success(handleGetMemory())
 		})
 	}),
+	getInterfacesMethod: withoutArguments(func(response MethodResponse) {
+		safeGo(response, func() {
+			response.success(handleGetInterfaces())
+		})
+	}),
 	clearEffectMethod: withArguments(func(profileId *int64, response MethodResponse) {
 		safeGo(response, func() {
 			response.success(handleClearEffect(*profileId))

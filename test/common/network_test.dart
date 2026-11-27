@@ -128,4 +128,34 @@ void main() {
       expect(asked, isFalse);
     });
   });
+
+  group('getPhysicalInterfaceNames', () {
+    test('prefers core-reported interfaces when available', () async {
+      listing([
+        _FakeInterface('eth0', [_v4('192.168.1.10')]),
+      ]);
+
+      final result = await getPhysicalInterfaceNames(
+        fetchFromCore: () async => ['wlan0', 'eth0'],
+      );
+
+      expect(result, ['wlan0', 'eth0']);
+    });
+
+    test('falls back to routable local interfaces when core fails', () async {
+      listing([
+        _FakeInterface('wlan0', [_v4('192.168.1.20')]),
+        _FakeInterface('eth0', [_v4('10.0.0.5')]),
+        _FakeInterface('apipa', [_v4('169.254.1.5')]),
+        _FakeInterface('linklocal6', [_v6('fe80::1%eth0')]),
+        _FakeInterface('empty', const []),
+      ]);
+
+      final result = await getPhysicalInterfaceNames(
+        fetchFromCore: () async => throw StateError('offline'),
+      );
+
+      expect(result, ['eth0', 'wlan0']);
+    });
+  });
 }

@@ -1,5 +1,6 @@
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod/misc.dart' show ProviderListenable;
@@ -122,19 +123,23 @@ class ConfigTextItem extends _ConfigItem<String> {
     required super.title,
     required super.onChanged,
     this.maxLength,
+    this.inputFormatters,
     this.keyboardType,
     this.validator,
     this.normalize,
+    this.resetValue,
     this.showValueAsSubtitle = true,
     super.subtitle,
     super.leading,
   });
 
   final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
   final TextInputType? keyboardType;
   final String? Function(String? value, AppLocalizations appLocalizations)?
   validator;
   final String Function(String value)? normalize;
+  final String? resetValue;
   final bool showValueAsSubtitle;
 
   String? _normalize(String? value) {
@@ -162,7 +167,9 @@ class ConfigTextItem extends _ConfigItem<String> {
       dialogTitle: label,
       value: value,
       maxLength: maxLength,
+      inputFormatters: inputFormatters,
       keyboardType: keyboardType,
+      resetValue: resetValue,
       validator: (value) {
         final normalized = _normalize(value);
         if (normalized == null || normalized.isEmpty) {

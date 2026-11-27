@@ -1,4 +1,6 @@
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/database.dart';
@@ -136,5 +138,46 @@ void main() {
         reason: '${testCase.name} must show the options affordance',
       );
     }
+  });
+
+  testWidgets('TUNButton sheet shows congestion control only for mips', (
+    tester,
+  ) async {
+    await AppLocalizations.load(const Locale('en'));
+    await pumpCard(tester, const TUNButton());
+
+    await tester.tap(find.text(currentAppLocalizations.options));
+    await tester.pumpAndSettle();
+
+    expect(find.text(currentAppLocalizations.stackMode), findsOneWidget);
+    expect(
+      find.text(currentAppLocalizations.congestionController),
+      findsOneWidget,
+    );
+    expect(find.text(currentAppLocalizations.mtu), findsOneWidget);
+
+    await tester.tap(find.text(currentAppLocalizations.stackMode));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(TunStack.system.name).last);
+    await tester.pumpAndSettle();
+
+    expect(find.text(currentAppLocalizations.congestionController), findsNothing);
+  });
+
+  testWidgets('VpnButton sheet adapts options without desktop-only rows', (
+    tester,
+  ) async {
+    await AppLocalizations.load(const Locale('en'));
+    await pumpCard(tester, const VpnButton());
+
+    await tester.tap(find.text(currentAppLocalizations.options));
+    await tester.pumpAndSettle();
+
+    expect(find.text(currentAppLocalizations.dnsHijacking), findsOneWidget);
+    expect(find.text(currentAppLocalizations.stackMode), findsOneWidget);
+    expect(find.text(currentAppLocalizations.mtu), findsOneWidget);
+    expect(find.text(currentAppLocalizations.autoRoute), findsNothing);
+    expect(find.text(currentAppLocalizations.strictRoute), findsNothing);
+    expect(find.text(currentAppLocalizations.networkInterface), findsNothing);
   });
 }

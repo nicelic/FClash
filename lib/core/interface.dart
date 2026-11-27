@@ -31,6 +31,8 @@ mixin CoreInterface {
 
   Future<String> setupConfig(SetupParams setupParams);
 
+  Future<List<String>> getInterfaces();
+
   Future<ProxiesData> getProxies();
 
   Future<String> changeProxy(ChangeProxyParams changeProxyParams);
@@ -359,5 +361,16 @@ abstract class CoreHandlerInterface with CoreInterface {
   @override
   Future<int> getMemory() async {
     return await _invokeMethod<int>(method: CoreMethod.getMemory) ?? 0;
+  }
+
+  @override
+  Future<List<String>> getInterfaces() async {
+    final data = await _invokeMethod<List<dynamic>>(
+      method: CoreMethod.getInterfaces,
+    );
+    if (data == null) {
+      return [];
+    }
+    return data.whereType<String>().toList();
   }
 }

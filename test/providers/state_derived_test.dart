@@ -230,7 +230,10 @@ void main() {
     expect(tray.isStart, isTrue);
 
     final vpn = container.read(vpnStateProvider);
-    expect(vpn.stack, container.read(patchClashConfigProvider).tun.stack);
+    final tunConfig = container.read(patchClashConfigProvider).tun;
+    expect(vpn.stack, tunConfig.stack);
+    expect(vpn.congestionController, tunConfig.congestionController);
+    expect(vpn.mtu, tunConfig.mtu);
     expect(vpn.vpnProps, container.read(vpnSettingProvider));
 
     expect(container.read(shouldPatchSystemDnsProvider), isTrue);
@@ -406,6 +409,42 @@ void main() {
       container.read(sharedStateProvider).vpnOptions?.routeAddress,
       defaultBypassPrivateRouteAddress,
     );
+  });
+
+  test('shared state and updateParams carry extended tun and interface settings', () async {
+    await AppLocalizations.load(const Locale('en'));
+    container.listen(sharedStateProvider, (_, _) {});
+    container
+        .read(patchClashConfigProvider.notifier)
+        .update(
+          (state) => state.copyWith(
+            interfaceNameMode: InterfaceNameMode.custom,
+            interfaceName: 'eth0',
+            tun: state.tun.copyWith(
+              stack: TunStack.mips,
+              autoRoute: false,
+              autoDetectInterface: true,
+              strictRoute: true,
+              congestionController: TunCongestionController.bbr,
+              mtu: 1480,
+              dnsHijack: defaultTunDnsHijack,
+            ),
+          ),
+        );
+
+    final params = container.read(updateParamsProvider);
+    expect(params.interfaceName, 'eth0');
+    expect(params.tun.stack, TunStack.mips);
+    expect(params.tun.autoDetectInterface, isTrue);
+    expect(params.tun.strictRoute, isTrue);
+    expect(params.tun.congestionController, TunCongestionController.bbr);
+    expect(params.tun.mtu, 1480);
+    expect(params.tun.dnsHijack, ['any:53', 'tcp://any:53']);
+
+    final vpnOptions = container.read(sharedStateProvider).vpnOptions;
+    expect(vpnOptions?.stack, 'mips');
+    expect(vpnOptions?.congestionController, 'bbr');
+    expect(vpnOptions?.mtu, 1480);
   });
 
   // VpnService.setHttpProxy cannot carry credentials.

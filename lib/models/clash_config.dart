@@ -249,9 +249,24 @@ abstract class Tun with _$Tun {
   const factory Tun({
     @Default(false) bool enable,
     @Default(appName) String device,
-    @JsonKey(name: 'auto-route') @Default(false) bool autoRoute,
-    @Default(TunStack.mixed) TunStack stack,
-    @JsonKey(name: 'dns-hijack') @Default(['any:53']) List<String> dnsHijack,
+    @JsonKey(name: 'auto-route') @Default(true) bool autoRoute,
+    @JsonKey(name: 'auto-detect-interface')
+    @Default(true)
+    bool autoDetectInterface,
+    @JsonKey(name: 'strict-route') @Default(false) bool strictRoute,
+    @JsonKey(unknownEnumValue: TunStack.mips)
+    @Default(TunStack.mips)
+    TunStack stack,
+    @JsonKey(
+      name: 'congestion-controller',
+      unknownEnumValue: TunCongestionController.cubic,
+    )
+    @Default(TunCongestionController.cubic)
+    TunCongestionController congestionController,
+    @Default(defaultTunMtu) int mtu,
+    @JsonKey(name: 'dns-hijack')
+    @Default(defaultTunDnsHijack)
+    List<String> dnsHijack,
     @JsonKey(name: 'route-address') @Default([]) List<String> routeAddress,
   }) = _Tun;
 
@@ -278,7 +293,7 @@ extension TunExt on Tun {
   Tun getRealTun(RouteMode routeMode) {
     final mRouteAddress = resolveRouteAddress(routeMode);
     return switch (system.isDesktop) {
-      true => copyWith(autoRoute: true, routeAddress: []),
+      true => copyWith(routeAddress: []),
       false => copyWith(
         autoRoute: mRouteAddress.isEmpty ? true : false,
         routeAddress: mRouteAddress,

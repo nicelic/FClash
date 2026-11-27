@@ -1,4 +1,9 @@
+import 'dart:io';
+
+import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/network.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/database.dart';
@@ -61,6 +66,23 @@ final _toggleCases = <_ToggleCase>[
     'dns hijacking',
     const DNSHijackingItem(),
     (c) => c.read(vpnSettingProvider).dnsHijacking,
+  ),
+  _ToggleCase(
+    'tun auto route',
+    const TunAutoRouteItem(),
+    (c) => c.read(patchClashConfigProvider).tun.autoRoute,
+    initial: true,
+  ),
+  _ToggleCase(
+    'tun strict route',
+    const TunStrictRouteItem(),
+    (c) => c.read(patchClashConfigProvider).tun.strictRoute,
+  ),
+  _ToggleCase(
+    'tun dns hijack',
+    const TunDnsHijackItem(),
+    (c) => c.read(patchClashConfigProvider).tun.dnsHijack.isNotEmpty,
+    initial: true,
   ),
 ];
 
@@ -200,6 +222,12 @@ void main() {
       ).map((item) => item.runtimeType);
       expect(desktopTypes, contains(InterfaceNameModeItem));
       expect(desktopTypes, contains(InterfaceNameItem));
+      expect(desktopTypes, contains(TunAutoRouteItem));
+      expect(desktopTypes, contains(TunStrictRouteItem));
+      expect(desktopTypes, contains(TunDnsHijackItem));
+      expect(desktopTypes, contains(TunInterfaceItem));
+      expect(desktopTypes, contains(TunCongestionControllerItem));
+      expect(desktopTypes, contains(TunMtuItem));
 
       final androidTypes = networkOptionsItems(
         isDesktop: false,
@@ -207,6 +235,12 @@ void main() {
       ).map((item) => item.runtimeType);
       expect(androidTypes, isNot(contains(InterfaceNameModeItem)));
       expect(androidTypes, isNot(contains(InterfaceNameItem)));
+      expect(androidTypes, isNot(contains(TunAutoRouteItem)));
+      expect(androidTypes, isNot(contains(TunStrictRouteItem)));
+      expect(androidTypes, isNot(contains(TunDnsHijackItem)));
+      expect(androidTypes, isNot(contains(TunInterfaceItem)));
+      expect(androidTypes, contains(TunCongestionControllerItem));
+      expect(androidTypes, contains(TunMtuItem));
     });
   });
 
@@ -233,6 +267,128 @@ void main() {
       expect(find.byType(ListTile), findsOneWidget);
     });
   });
+
+  group('extended tun controls', () {
+    testWidgets('tun dns hijack toggle writes udp and tcp any:53 rules', (
+      tester,
+    ) async {
+      await pumpItem(tester, const TunDnsHijackItem());
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(container.read(patchClashConfigProvider).tun.dnsHijack, isEmpty);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(patchClashConfigProvider).tun.dnsHijack,
+        ['any:53', 'tcp://any:53'],
+      );
+    });
+
+    testWidgets('congestion controller is visible only when stack is mips', (
+      tester,
+    ) async {
+      container
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(stack: TunStack.gvisor));
+      await pumpItem(tester, const TunCongestionControllerItem());
+      expect(find.byType(ListTile), findsNothing);
+
+      container
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(stack: TunStack.mips));
+      await pumpItem(tester, const TunCongestionControllerItem());
+      expect(find.byType(ListTile), findsOneWidget);
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(TunCongestionController.bbr3.name).last);
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(patchClashConfigProvider).tun.congestionController,
+        TunCongestionController.bbr3,
+      );
+    });
+
+    testWidgets('mtu item validates 1280-9000 range and saves integer values', (
+      tester,
+    ) async {
+      await AppLocalizations.load(const Locale('en'));
+      await pumpItem(tester, const TunMtuItem());
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, '1200');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(currentAppLocalizations.submit));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(patchClashConfigProvider).tun.mtu,
+        defaultTunMtu,
+      );
+
+      await tester.enterText(find.byType(TextFormField).first, '1500');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(currentAppLocalizations.submit));
+      await tester.pumpAndSettle();
+      expect(container.read(patchClashConfigProvider).tun.mtu, 1500);
+    });
+
+    testWidgets('interface picker lists auto and detected physical interfaces', (
+      tester,
+    ) async {
+      await AppLocalizations.load(const Locale('en'));
+      final previous = listNetworkInterfaces;
+      addTearDown(() => listNetworkInterfaces = previous);
+      listNetworkInterfaces = ({bool includeLoopback = false}) async => [
+        _FakeNic('WLAN', [_FakeNicAddress('192.168.1.2')]),
+        _FakeNic('Ethernet', [_FakeNicAddress('10.0.0.2')]),
+      ];
+
+      await pumpItem(tester, const TunInterfaceItem());
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('WLAN').last);
+      await tester.pumpAndSettle();
+      var clashConfig = container.read(patchClashConfigProvider);
+      expect(clashConfig.interfaceNameMode, InterfaceNameMode.custom);
+      expect(clashConfig.interfaceName, 'WLAN');
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(currentAppLocalizations.auto).last);
+      await tester.pumpAndSettle();
+      clashConfig = container.read(patchClashConfigProvider);
+      expect(clashConfig.interfaceNameMode, InterfaceNameMode.clear);
+      expect(clashConfig.interfaceName, isEmpty);
+    });
+  });
+}
+
+class _FakeNic implements NetworkInterface {
+  _FakeNic(this.name, this.addresses);
+
+  @override
+  final String name;
+
+  @override
+  final List<InternetAddress> addresses;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeNicAddress implements InternetAddress {
+  _FakeNicAddress(this.address);
+
+  @override
+  final String address;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 String _routeModeLabel(RouteMode mode) {

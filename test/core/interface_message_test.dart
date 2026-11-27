@@ -105,6 +105,7 @@ void main() {
     expect(await core.isInit, isFalse);
     expect(await core.forceGc(), isFalse);
     expect(await core.getMemory(), 0);
+    expect(await core.getInterfaces(), isEmpty);
     expect(await core.getExternalProviders(), isEmpty);
     expect(await core.getExternalProvider('p'), isNull);
   });

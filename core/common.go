@@ -20,6 +20,7 @@ import (
 	"github.com/metacubex/mihomo/adapter/provider"
 	"github.com/metacubex/mihomo/component/auth"
 	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/iface"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/updater"
 	"github.com/metacubex/mihomo/config"
@@ -246,6 +247,12 @@ func patchTun(target *LC.Tun, params *tunSchema) {
 	if params.AutoRoute != nil {
 		target.AutoRoute = *params.AutoRoute
 	}
+	if params.AutoDetectInterface != nil {
+		target.AutoDetectInterface = *params.AutoDetectInterface
+	}
+	if params.StrictRoute != nil {
+		target.StrictRoute = *params.StrictRoute
+	}
 	if params.Device != nil {
 		target.Device = *params.Device
 	}
@@ -257,6 +264,12 @@ func patchTun(target *LC.Tun, params *tunSchema) {
 	}
 	if params.Stack != nil {
 		target.Stack = *params.Stack
+	}
+	if params.MTU != nil {
+		target.MTU = *params.MTU
+	}
+	if params.CongestionController != nil {
+		target.CongestionController = *params.CongestionController
 	}
 }
 
@@ -281,6 +294,11 @@ func updateConfig(params *UpdateParams) error {
 	if params.TCPConcurrent != nil {
 		general.TCPConcurrent = *params.TCPConcurrent
 		dialer.SetTcpConcurrent(general.TCPConcurrent)
+	}
+	if params.InterfaceName != nil {
+		general.Interface = *params.InterfaceName
+		dialer.DefaultInterface.Store(general.Interface)
+		iface.FlushCache()
 	}
 	if params.UnifiedDelay != nil {
 		general.UnifiedDelay = *params.UnifiedDelay

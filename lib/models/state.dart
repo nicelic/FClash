@@ -304,6 +304,9 @@ abstract class SelectedProxyState with _$SelectedProxyState {
 abstract class VpnState with _$VpnState {
   const factory VpnState({
     required TunStack stack,
+    @Default(TunCongestionController.cubic)
+    TunCongestionController congestionController,
+    @Default(defaultTunMtu) int mtu,
     required VpnProps vpnProps,
   }) = _VpnState;
 }

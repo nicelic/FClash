@@ -19,6 +19,11 @@ UpdateParams updateParams(Ref ref) {
         logLevel: state.logLevel,
         ipv6: state.ipv6,
         tcpConcurrent: state.tcpConcurrent,
+        interfaceName: switch (state.interfaceNameMode) {
+          InterfaceNameMode.clear => '',
+          InterfaceNameMode.follow => null,
+          InterfaceNameMode.custom => state.interfaceName,
+        },
         externalController: state.externalController,
         unifiedDelay: state.unifiedDelay,
         mixedPort: state.mixedPort,
@@ -80,10 +85,21 @@ TrayTitleState trayTitleState(Ref ref) {
 @riverpod
 VpnState vpnState(Ref ref) {
   final vpnProps = ref.watch(vpnSettingProvider);
-  final stack = ref.watch(
-    patchClashConfigProvider.select((state) => state.tun.stack),
+  final tun = ref.watch(
+    patchClashConfigProvider.select(
+      (state) => (
+        stack: state.tun.stack,
+        congestionController: state.tun.congestionController,
+        mtu: state.tun.mtu,
+      ),
+    ),
   );
-  return VpnState(stack: stack, vpnProps: vpnProps);
+  return VpnState(
+    stack: tun.stack,
+    congestionController: tun.congestionController,
+    mtu: tun.mtu,
+    vpnProps: vpnProps,
+  );
 }
 
 @riverpod
@@ -177,6 +193,8 @@ SharedState sharedState(Ref ref) {
     patchClashConfigProvider.select(
       (state) => (
         stack: state.tun.stack.name,
+        congestionController: state.tun.congestionController.name,
+        mtu: state.tun.mtu,
         mixedPort: state.mixedPort,
         routeAddress: state.tun.resolveRouteAddress(networkSetting.routeMode),
       ),
@@ -202,6 +220,8 @@ SharedState sharedState(Ref ref) {
     vpnOptions: VpnOptions(
       enable: vpnSetting.enable,
       stack: stack,
+      congestionController: clashConfig.congestionController,
+      mtu: clashConfig.mtu,
       // VpnService.setHttpProxy cannot carry credentials, so an authenticated
       // mixed port must not be declared as the system HTTP proxy; traffic
       // still flows through TUN.

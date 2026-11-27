@@ -222,6 +222,10 @@ class CoreController {
     return _interface.getMemory();
   }
 
+  Future<List<String>> getInterfaces() async {
+    return _interface.getInterfaces();
+  }
+
   void resetTraffic() {
     _interface.resetTraffic();
   }

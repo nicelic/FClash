@@ -77,6 +77,7 @@ class _RecordingCoreHandler extends CoreHandlerInterface {
         'mode': 'rule',
         'rule': ['MATCH,DIRECT'],
       },
+      CoreMethod.getInterfaces => ['eth0', 'wlan0'],
       CoreMethod.getMemory => 2048,
       _ => '',
     };
@@ -219,6 +220,7 @@ void main() {
       'mode': 'rule',
       'rule': ['MATCH,DIRECT'],
     });
+    expect(await handler.getInterfaces(), ['eth0', 'wlan0']);
     expect(await handler.getMemory(), 2048);
   });
 

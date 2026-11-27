@@ -138,5 +138,10 @@ const main = (config) => {
   return config;
 }''';
 
+const defaultTunMtu = 9000;
+const minTunMtu = 1280;
+const maxTunMtu = 9000;
+const defaultTunDnsHijack = ['any:53', 'tcp://any:53'];
+
 const backupDatabaseName = 'database.sqlite';
 const configJsonName = 'config.json';

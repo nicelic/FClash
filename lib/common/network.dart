@@ -58,3 +58,37 @@ Future<String?> getLocalIpAddress() async {
   }
   return '';
 }
+
+bool _isRoutableAddress(String address) {
+  final raw = address.split('%').first;
+  final parsed = InternetAddress.tryParse(raw);
+  if (parsed == null) {
+    return false;
+  }
+  return !parsed.isLoopback && !parsed.isLinkLocal && !parsed.isMulticast;
+}
+
+Future<List<String>> getPhysicalInterfaceNames({
+  Future<List<String>> Function()? fetchFromCore,
+}) async {
+  if (fetchFromCore != null) {
+    try {
+      final coreInterfaces = await fetchFromCore();
+      if (coreInterfaces.isNotEmpty) {
+        return coreInterfaces;
+      }
+    } catch (_) {}
+  }
+  final interfaces = await listNetworkInterfaces(includeLoopback: false);
+  final names = interfaces
+      .where(
+        (item) =>
+            item.name.isNotEmpty &&
+            item.addresses.any((addr) => _isRoutableAddress(addr.address)),
+      )
+      .map((item) => item.name)
+      .toSet()
+      .toList()
+    ..sort();
+  return names;
+}

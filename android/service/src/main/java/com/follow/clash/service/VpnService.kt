@@ -117,10 +117,11 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     private fun handleStart(options: VpnOptions) {
+        val mtu = options.resolvedMtu()
         val fd = with(Builder()) {
             addAddressAndRoutes(options)
             addDnsServers(options)
-            setMtu(MTU)
+            setMtu(mtu)
             configureAccessControl(options)
             setSession(getString(CommonR.string.app_name))
             setBlocking(false)
@@ -160,6 +161,8 @@ class VpnService : SystemVpnService(), ManagedService {
                         stack = options.stack,
                         address = options.tunAddress,
                         dns = options.tunDns,
+                        congestionController = options.resolvedCongestionController(),
+                        mtu = mtu,
                     ),
                 ) { "Core rejected the tun file descriptor" }
             } catch (error: Exception) {
@@ -292,6 +295,5 @@ class VpnService : SystemVpnService(), ManagedService {
         private const val NET_ANY = "0.0.0.0"
         private const val NET_ANY6 = "::"
         private const val LOCAL_HOST = "127.0.0.1"
-        private const val MTU = 9000
     }
 }

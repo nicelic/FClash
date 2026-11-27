@@ -29,6 +29,7 @@ type UpdateParams struct {
 	LogLevel           *log.LogLevel      `json:"log-level"`
 	IPv6               *bool              `json:"ipv6"`
 	TCPConcurrent      *bool              `json:"tcp-concurrent"`
+	InterfaceName      *string            `json:"interface-name"`
 	ExternalController *string            `json:"external-controller"`
 	UnifiedDelay       *bool              `json:"unified-delay"`
 	Authentication     *[]string          `json:"authentication"`
@@ -37,12 +38,16 @@ type UpdateParams struct {
 }
 
 type tunSchema struct {
-	Enable       bool               `yaml:"enable" json:"enable"`
-	Device       *string            `yaml:"device" json:"device"`
-	Stack        *constant.TUNStack `yaml:"stack" json:"stack"`
-	DNSHijack    *[]string          `yaml:"dns-hijack" json:"dns-hijack"`
-	AutoRoute    *bool              `yaml:"auto-route" json:"auto-route"`
-	RouteAddress *[]netip.Prefix    `yaml:"route-address" json:"route-address,omitempty"`
+	Enable               bool               `yaml:"enable" json:"enable"`
+	Device               *string            `yaml:"device" json:"device"`
+	Stack                *constant.TUNStack `yaml:"stack" json:"stack"`
+	DNSHijack            *[]string          `yaml:"dns-hijack" json:"dns-hijack"`
+	AutoRoute            *bool              `yaml:"auto-route" json:"auto-route"`
+	AutoDetectInterface  *bool              `yaml:"auto-detect-interface" json:"auto-detect-interface"`
+	StrictRoute          *bool              `yaml:"strict-route" json:"strict-route"`
+	MTU                  *uint32            `yaml:"mtu" json:"mtu"`
+	CongestionController *string            `yaml:"congestion-controller" json:"congestion-controller"`
+	RouteAddress         *[]netip.Prefix    `yaml:"route-address" json:"route-address,omitempty"`
 }
 
 type SideLoadParams struct {
@@ -113,6 +118,7 @@ const (
 	crashMethod                    CoreMethod = "crash"
 	setupConfigMethod              CoreMethod = "setupConfig"
 	getConfigMethod                CoreMethod = "getConfig"
+	getInterfacesMethod            CoreMethod = "getInterfaces"
 	clearEffectMethod              CoreMethod = "clearEffect"
 )
 

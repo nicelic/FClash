@@ -193,6 +193,12 @@ Future<({String yaml, String md5})> _makeRealProfileTask(
   rawConfig['tun']['stack'] = realPatchConfig.tun.stack.name;
   rawConfig['tun']['route-address'] = realPatchConfig.tun.routeAddress;
   rawConfig['tun']['auto-route'] = realPatchConfig.tun.autoRoute;
+  rawConfig['tun']['auto-detect-interface'] =
+      realPatchConfig.tun.autoDetectInterface;
+  rawConfig['tun']['strict-route'] = realPatchConfig.tun.strictRoute;
+  rawConfig['tun']['mtu'] = realPatchConfig.tun.mtu;
+  rawConfig['tun']['congestion-controller'] =
+      realPatchConfig.tun.congestionController.name;
   rawConfig['geodata-loader'] = realPatchConfig.geodataLoader.name;
   rawConfig['geo-auto-update'] = realPatchConfig.geoAutoUpdate;
   rawConfig['geo-update-interval'] = realPatchConfig.geoUpdateInterval;

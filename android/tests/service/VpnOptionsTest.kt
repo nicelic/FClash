@@ -142,3 +142,26 @@ class RouteAddressTest {
         }
     }
 }
+
+class TunOptionsResolutionTest {
+    @Test
+    fun `resolvedMtu keeps valid values and resets out-of-range values`() {
+        val base = optionsWithRoutes(emptyList())
+
+        assertEquals(9000, base.copy(mtu = 0).resolvedMtu())
+        assertEquals(9000, base.copy(mtu = 1279).resolvedMtu())
+        assertEquals(1280, base.copy(mtu = 1280).resolvedMtu())
+        assertEquals(1500, base.copy(mtu = 1500).resolvedMtu())
+        assertEquals(9000, base.copy(mtu = 9000).resolvedMtu())
+        assertEquals(9000, base.copy(mtu = 9001).resolvedMtu())
+    }
+
+    @Test
+    fun `resolvedCongestionController handles null fallback safely`() {
+        val base = optionsWithRoutes(emptyList())
+
+        assertEquals("cubic", base.resolvedCongestionController())
+        assertEquals("", base.copy(congestionController = null).resolvedCongestionController())
+        assertEquals("bbr3", base.copy(congestionController = "bbr3").resolvedCongestionController())
+    }
+}

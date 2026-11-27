@@ -62,8 +62,10 @@ class SharedStateTest {
                 "allowBypass": false,
                 "systemProxy": true,
                 "bypassDomain": ["example.test"],
-                "stack": "gvisor",
-                "routeAddress": ["0.0.0.0/0"]
+                "stack": "mips",
+                "routeAddress": ["0.0.0.0/0"],
+                "congestionController": "bbr3",
+                "mtu": 1500
               },
               "setupParams": {
                 "test-url": "https://example.test/204",
@@ -80,7 +82,9 @@ class SharedStateTest {
         assertEquals(true, state.onlyStatisticsProxy)
         assertEquals(false, state.showStopAction)
         assertEquals(7890, state.vpnOptions?.port)
-        assertEquals("gvisor", state.vpnOptions?.stack)
+        assertEquals("mips", state.vpnOptions?.stack)
+        assertEquals("bbr3", state.vpnOptions?.congestionController)
+        assertEquals(1500, state.vpnOptions?.mtu)
         assertEquals(
             AccessControlMode.REJECT_SELECTED,
             state.vpnOptions?.accessControlProps?.mode,

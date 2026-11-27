@@ -287,6 +287,43 @@ void main() {
     });
   });
 
+  group('Tun JSON round-trip', () {
+    test('defaults match requested mips and dns hijack settings', () {
+      const tun = Tun();
+
+      expect(tun.stack, TunStack.mips);
+      expect(TunStack.values.first, TunStack.mips);
+      expect(tun.autoRoute, isTrue);
+      expect(tun.autoDetectInterface, isTrue);
+      expect(tun.strictRoute, isFalse);
+      expect(tun.congestionController, TunCongestionController.cubic);
+      expect(tun.mtu, defaultTunMtu);
+      expect(tun.dnsHijack, defaultTunDnsHijack);
+    });
+
+    test('round-trips extended tun fields and falls back on unknown enums', () {
+      const tun = Tun(
+        enable: true,
+        stack: TunStack.mips,
+        autoRoute: false,
+        autoDetectInterface: false,
+        strictRoute: true,
+        congestionController: TunCongestionController.bbr3,
+        mtu: 1420,
+        dnsHijack: ['any:53', 'tcp://any:53'],
+      );
+      final restored = roundTrip(() => tun.toJson(), Tun.fromJson);
+      expect(restored, tun);
+
+      final fallback = Tun.fromJson({
+        'stack': 'future-stack',
+        'congestion-controller': 'future-cc',
+      });
+      expect(fallback.stack, TunStack.mips);
+      expect(fallback.congestionController, TunCongestionController.cubic);
+    });
+  });
+
   group('ProxiesStyleProps JSON round-trip', () {
     test('default values', () {
       const props = ProxiesStyleProps();

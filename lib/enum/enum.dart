@@ -162,7 +162,9 @@ enum Network { tcp, udp }
 
 enum ProxiesSortType { none, delay, name }
 
-enum TunStack { gvisor, system, mixed }
+enum TunStack { mips, gvisor, system, mixed }
+
+enum TunCongestionController { cubic, reno, bbr, bbr3 }
 
 enum AccessControlMode { acceptSelected, rejectSelected }
 

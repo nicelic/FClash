@@ -7,12 +7,15 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/iface"
 	"github.com/metacubex/mihomo/component/updater"
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
@@ -847,5 +850,97 @@ func TestTestDelayStopsQueueingOnceTheTimeoutIsSpent(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("handleTestDelay outlived the timeout it was given, waiting for a slot")
+	}
+}
+
+func TestUpdateConfigPatchesExtendedTunFieldsAndInterfaceName(t *testing.T) {
+	withCurrentConfig(t, &config.Config{General: &config.General{}, Controller: &config.Controller{}})
+	previousDefault := dialer.DefaultInterface.Load()
+	t.Cleanup(func() {
+		dialer.DefaultInterface.Store(previousDefault)
+	})
+
+	autoRoute := true
+	autoDetectInterface := true
+	strictRoute := true
+	mtu := uint32(1500)
+	cc := "bbr3"
+	stack := constant.TunMips
+	hijack := []string{"any:53", "tcp://any:53"}
+	ifaceName := "eth0"
+
+	err := updateConfig(&UpdateParams{
+		InterfaceName: &ifaceName,
+		Tun: &tunSchema{
+			Enable:               true,
+			Stack:                &stack,
+			AutoRoute:            &autoRoute,
+			AutoDetectInterface:  &autoDetectInterface,
+			StrictRoute:          &strictRoute,
+			MTU:                  &mtu,
+			CongestionController: &cc,
+			DNSHijack:            &hijack,
+		},
+	})
+	if err != nil {
+		t.Fatalf("updateConfig error: %v", err)
+	}
+
+	tunCfg := currentConfig.General.Tun
+	if tunCfg.Stack != constant.TunMips ||
+		!tunCfg.AutoRoute ||
+		!tunCfg.AutoDetectInterface ||
+		!tunCfg.StrictRoute ||
+		tunCfg.MTU != 1500 ||
+		tunCfg.CongestionController != "bbr3" ||
+		!slices.Equal(tunCfg.DNSHijack, hijack) {
+		t.Fatalf("unexpected tun config after update: %+v", tunCfg)
+	}
+	if dialer.DefaultInterface.Load() != "eth0" || currentConfig.General.Interface != "eth0" {
+		t.Fatalf("interface-name not applied: default=%q general=%q", dialer.DefaultInterface.Load(), currentConfig.General.Interface)
+	}
+
+	empty := ""
+	if err := updateConfig(&UpdateParams{InterfaceName: &empty}); err != nil {
+		t.Fatalf("updateConfig clear interface error: %v", err)
+	}
+	if dialer.DefaultInterface.Load() != "" {
+		t.Fatalf("expected cleared DefaultInterface, got %q", dialer.DefaultInterface.Load())
+	}
+}
+
+func TestFilterPhysicalInterfaces(t *testing.T) {
+	mac := net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
+	routable := []netip.Prefix{netip.MustParsePrefix("192.168.1.10/24")}
+	linkLocalOnly := []netip.Prefix{netip.MustParsePrefix("169.254.1.10/16")}
+
+	ifaces := map[string]*iface.Interface{
+		"wlan0":   {Name: "wlan0", Flags: net.FlagUp, HardwareAddr: mac, Addresses: routable},
+		"eth0":    {Name: "eth0", Flags: net.FlagUp, HardwareAddr: mac, Addresses: routable},
+		"lo":      {Name: "lo", Flags: net.FlagUp | net.FlagLoopback, HardwareAddr: mac, Addresses: routable},
+		"utun0":   {Name: "utun0", Flags: net.FlagUp | net.FlagPointToPoint, Addresses: routable},
+		"down0":   {Name: "down0", Flags: 0, HardwareAddr: mac, Addresses: routable},
+		"nomac":   {Name: "nomac", Flags: net.FlagUp, Addresses: routable},
+		"apipa":   {Name: "apipa", Flags: net.FlagUp, HardwareAddr: mac, Addresses: linkLocalOnly},
+		"FlClash": {Name: "FlClash", Flags: net.FlagUp, HardwareAddr: mac, Addresses: routable},
+	}
+
+	got := filterPhysicalInterfaces(ifaces, "FlClash")
+	want := []string{"eth0", "wlan0"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("filterPhysicalInterfaces = %v, want %v", got, want)
+	}
+}
+
+func TestHandleGetInterfacesReturnsNonNilSlice(t *testing.T) {
+	cfg := &config.Config{
+		General:    &config.General{},
+		Controller: &config.Controller{},
+	}
+	cfg.General.Tun.Device = "FlClash"
+	withCurrentConfig(t, cfg)
+
+	if got := handleGetInterfaces(); got == nil {
+		t.Fatal("handleGetInterfaces() returned nil, want non-nil slice")
 	}
 }
