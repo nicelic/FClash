@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"os"
@@ -19,7 +20,9 @@ import (
 	"github.com/metacubex/mihomo/component/updater"
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/listener"
 	authStore "github.com/metacubex/mihomo/listener/auth"
+	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -942,5 +945,113 @@ func TestHandleGetInterfacesReturnsNonNilSlice(t *testing.T) {
 
 	if got := handleGetInterfaces(); got == nil {
 		t.Fatal("handleGetInterfaces() returned nil, want non-nil slice")
+	}
+}
+
+func TestInactiveConfigForApplyStripsListenersWithoutMutatingSource(t *testing.T) {
+	src := &config.Config{
+		General: &config.General{
+			Inbound: config.Inbound{
+				Port:              7890,
+				SocksPort:         7891,
+				RedirPort:         7892,
+				TProxyPort:        7893,
+				MixedPort:         7894,
+				ShadowSocksConfig: "ss://example",
+				VmessConfig:       "vmess://example",
+				TuicServer:        LC.TuicServer{Enable: true},
+				Tun:               LC.Tun{Enable: true, Stack: constant.TunMixed},
+			},
+		},
+		IPTables: &config.IPTables{Enable: true},
+		Tunnels: []LC.Tunnel{
+			{Network: []string{"tcp"}, Address: "127.0.0.1:8080", Target: "example.com:80", Proxy: "DIRECT"},
+		},
+	}
+
+	got := inactiveConfigForApply(src)
+
+	if got == nil || got.General == nil || got.IPTables == nil {
+		t.Fatalf("inactiveConfigForApply returned incomplete config: %+v", got)
+	}
+	if got.General.Port != 0 ||
+		got.General.SocksPort != 0 ||
+		got.General.RedirPort != 0 ||
+		got.General.TProxyPort != 0 ||
+		got.General.MixedPort != 0 ||
+		got.General.ShadowSocksConfig != "" ||
+		got.General.VmessConfig != "" ||
+		got.General.TuicServer.Enable ||
+		got.General.Tun.Enable ||
+		got.IPTables.Enable ||
+		got.Listeners != nil ||
+		got.Tunnels != nil {
+		t.Fatalf("inactive copy retained active listener fields: %+v", got.General)
+	}
+	if src.General.MixedPort != 7894 || !src.General.Tun.Enable || !src.IPTables.Enable || len(src.Tunnels) != 1 {
+		t.Fatalf("inactiveConfigForApply mutated source config: %+v", src.General)
+	}
+}
+
+func TestApplyConfigDefersListenersUntilStart(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("allocate loopback port: %v", err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
+	homeDir, err := os.MkdirTemp("", "flclash-apply-config-*")
+	if err != nil {
+		t.Fatalf("create temp homeDir: %v", err)
+	}
+	cfgYAML := fmt.Sprintf("mixed-port: %d\nmode: rule\n", port)
+	if err := os.WriteFile(filepath.Join(homeDir, "config.yaml"), []byte(cfgYAML), 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	prevHome := constant.Path.HomeDir()
+	constant.SetHomeDir(homeDir)
+	withCurrentConfig(t, nil)
+	isRunning.Store(false)
+	t.Cleanup(func() {
+		stopRuntimeObservers()
+		handleStopListener()
+		constant.SetHomeDir(prevHome)
+		_ = os.RemoveAll(homeDir)
+	})
+
+	if err := applyConfig(defaultSetupParams()); err != nil {
+		t.Fatalf("applyConfig while stopped: %v", err)
+	}
+	if isRunning.Load() {
+		t.Fatal("applyConfig unexpectedly set isRunning to true")
+	}
+	if got := listener.GetPorts().MixedPort; got != 0 {
+		t.Fatalf("MixedPort = %d while stopped, want 0", got)
+	}
+	if currentConfig == nil || currentConfig.General.MixedPort != port {
+		t.Fatalf("currentConfig lost target MixedPort: %+v", currentConfig)
+	}
+
+	if !handleStartListener() {
+		t.Fatal("handleStartListener returned false")
+	}
+	if got := listener.GetPorts().MixedPort; got != port {
+		t.Fatalf("MixedPort after start = %d, want %d", got, port)
+	}
+
+	if err := applyConfig(defaultSetupParams()); err != nil {
+		t.Fatalf("applyConfig while running: %v", err)
+	}
+	if got := listener.GetPorts().MixedPort; got != port {
+		t.Fatalf("MixedPort after running reapply = %d, want %d", got, port)
+	}
+
+	if !handleStopListener() {
+		t.Fatal("handleStopListener returned false")
+	}
+	if got := listener.GetPorts().MixedPort; got != 0 {
+		t.Fatalf("MixedPort after stop = %d, want 0", got)
 	}
 }

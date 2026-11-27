@@ -129,19 +129,17 @@ class SetupAction extends _$SetupAction {
 
   Future<bool> _start(_RunRequest request) async {
     if (request.initialize) {
-      var applied = false;
-      try {
-        applied = await applyProfile(
-          force: true,
-          preloadInvoke: () => _setCoreRunning(request),
-        );
-      } catch (_) {
-        applied = false;
+      return _applyProfileOnStart(request);
+    }
+
+    final tunEnabled = ref.read(
+      patchClashConfigProvider.select((state) => state.tun.enable),
+    );
+    if (isDesktopPlatform && tunEnabled) {
+      final handled = await _startWithDesktopTun(request);
+      if (handled != null) {
+        return handled;
       }
-      if (!applied && _isCurrent(request)) {
-        await globalState.safeRun(() => setRunning(false));
-      }
-      return applied;
     }
 
     try {
@@ -154,6 +152,61 @@ class SetupAction extends _$SetupAction {
       applyProfileDebounce(force: true, silence: true);
     }
     return true;
+  }
+
+  Future<bool> _applyProfileOnStart(
+    _RunRequest request, {
+    bool rollbackOnError = false,
+  }) async {
+    var applied = false;
+    try {
+      applied = await applyProfile(
+        force: true,
+        preloadInvoke: () => _setCoreRunning(request),
+      );
+    } catch (_) {
+      if (rollbackOnError) {
+        _rollbackRunning(request);
+        rethrow;
+      }
+      applied = false;
+    }
+    if (!applied && _isCurrent(request)) {
+      await globalState.safeRun(() => setRunning(false));
+    }
+    return applied;
+  }
+
+  Future<bool?> _startWithDesktopTun(_RunRequest request) async {
+    var shouldContinue = true;
+    try {
+      shouldContinue = await requestAdmin(true);
+    } catch (_) {
+      _rollbackRunning(request);
+      rethrow;
+    }
+    if (!_isCurrent(request)) {
+      return false;
+    }
+    if (!shouldContinue) {
+      debouncer.cancel(FunctionTag.updateConfig);
+      try {
+        final restarted = await _restartCoreAfterAuthorization();
+        if (!restarted) {
+          _rollbackRunning(request);
+        }
+        return restarted;
+      } catch (_) {
+        _rollbackRunning(request);
+        rethrow;
+      }
+    }
+    if (ref.read(authorizedTunEnableProvider) ==
+        TunAuthorizationState.authorized) {
+      debouncer.cancel(FunctionTag.updateConfig);
+      return _applyProfileOnStart(request, rollbackOnError: true);
+    }
+    return null;
   }
 
   Future<bool> _stop(_RunRequest request) async {
@@ -213,10 +266,12 @@ class SetupAction extends _$SetupAction {
   Future<void> updateConfig() async {
     await globalState.safeRun(() async {
       final updateParams = ref.read(updateParamsProvider);
-      final shouldContinueSetup = await requestAdmin(updateParams.tun.enable);
-      if (!shouldContinueSetup) {
-        await _restartCoreAfterAuthorization();
-        return;
+      if (isDesktopPlatform && ref.read(isStartProvider)) {
+        final shouldContinueSetup = await requestAdmin(updateParams.tun.enable);
+        if (!shouldContinueSetup) {
+          await _restartCoreAfterAuthorization();
+          return;
+        }
       }
       final message = await _core.updateConfig(
         updateParams.copyWith.tun(
@@ -386,7 +441,13 @@ class SetupAction extends _$SetupAction {
     return '';
   }
 
+  @protected
+  bool get isDesktopPlatform => system.isDesktop;
+
   bool _getEffectiveTunEnable(bool enableTun) {
+    if (!isDesktopPlatform) {
+      return false;
+    }
     final authorizationState = ref.read(authorizedTunEnableProvider);
     return enableTun && authorizationState == TunAuthorizationState.authorized;
   }
@@ -398,7 +459,7 @@ class SetupAction extends _$SetupAction {
 
   @visibleForTesting
   Future<bool> requestAdmin(bool enableTun) async {
-    if (!enableTun) {
+    if (!isDesktopPlatform || !enableTun) {
       return true;
     }
     final authorizationState = ref.read(authorizedTunEnableProvider);
@@ -461,9 +522,11 @@ class SetupAction extends _$SetupAction {
     }
     commonPrint.log('setup ===> ${profile?.realLabel}');
     final patchConfig = ref.read(patchClashConfigProvider);
-    final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
-    if (!shouldContinueSetup) {
-      return _SetupTaskResult.handoffToCoreRestart;
+    if (isDesktopPlatform && ref.read(isStartProvider)) {
+      final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
+      if (!shouldContinueSetup) {
+        return _SetupTaskResult.handoffToCoreRestart;
+      }
     }
     final effectiveTunEnable = _getEffectiveTunEnable(patchConfig.tun.enable);
     final realPatchConfig = patchConfig.copyWith.tun(

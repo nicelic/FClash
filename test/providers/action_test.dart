@@ -644,7 +644,7 @@ void main() {
     });
 
     test(
-      'restarts core after newly granting admin during config update',
+      'restarts core after newly granting admin during config update while running',
       () async {
         late _AuthorizationSetupAction setupAction;
         late _RestartRecordingCoreAction coreAction;
@@ -661,6 +661,7 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
+        container.read(runTimeProvider.notifier).value = 0;
         container
             .read(patchClashConfigProvider.notifier)
             .update((state) => state.copyWith.tun(enable: true));
@@ -697,6 +698,7 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
+        container.read(runTimeProvider.notifier).value = 0;
         container
             .read(patchClashConfigProvider.notifier)
             .update((state) => state.copyWith.tun(enable: true));
@@ -723,6 +725,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      container.read(runTimeProvider.notifier).value = 0;
       container
           .read(patchClashConfigProvider.notifier)
           .update((state) => state.copyWith.tun(enable: true));
@@ -790,6 +793,217 @@ void main() {
 
       expect(container.read(shouldPatchSystemDnsProvider), isFalse);
     });
+
+    test(
+      'restarts core when starting desktop proxy with unauthorized TUN',
+      () async {
+        late _AuthorizationSetupAction setupAction;
+        late _RestartRecordingCoreAction coreAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction([AuthorizeCode.success]);
+              return setupAction;
+            }),
+            coreActionProvider.overrideWith(() {
+              coreAction = _RestartRecordingCoreAction();
+              return coreAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+        container.read(coreActionProvider);
+
+        final started = await setupAction.setRunning(true);
+
+        expect(started, isTrue);
+        expect(setupAction.authorizationRequestCount, 1);
+        expect(coreAction.restartCount, 1);
+        expect(
+          container.read(authorizedTunEnableProvider),
+          TunAuthorizationState.authorized,
+        );
+      },
+    );
+
+    test(
+      'rolls back running state if deferred TUN restart returns false',
+      () async {
+        late _AuthorizationSetupAction setupAction;
+        late _RestartRecordingCoreAction coreAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction([AuthorizeCode.success]);
+              return setupAction;
+            }),
+            coreActionProvider.overrideWith(() {
+              coreAction = _RestartRecordingCoreAction()..restartResult = false;
+              return coreAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+        container.read(coreActionProvider);
+
+        final started = await setupAction.setRunning(true);
+
+        expect(started, isFalse);
+        expect(coreAction.restartCount, 1);
+        expect(container.read(isStartProvider), isFalse);
+      },
+    );
+
+    test(
+      'cancels deferred TUN restart when stopped while authorization is pending',
+      () async {
+        final gate = Completer<AuthorizeCode>();
+        late _AuthorizationSetupAction setupAction;
+        late _RestartRecordingCoreAction coreAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction(
+                const [],
+                pendingAuthorization: gate,
+              );
+              return setupAction;
+            }),
+            coreActionProvider.overrideWith(() {
+              coreAction = _RestartRecordingCoreAction();
+              return coreAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+        container.read(coreActionProvider);
+
+        final startFuture = setupAction.setRunning(true);
+        await setupAction.setRunning(false);
+        gate.complete(AuthorizeCode.success);
+
+        expect(await startFuture, isFalse);
+        expect(coreAction.restartCount, 0);
+        expect(container.read(isStartProvider), isFalse);
+      },
+    );
+
+    test(
+      'syncs config before starting listeners when authorization needs no restart',
+      () async {
+        late _AuthorizationSetupAction setupAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction(
+                [AuthorizeCode.none],
+                interceptApplyProfile: true,
+              );
+              return setupAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+
+        final started = await setupAction.setRunning(true);
+
+        expect(started, isTrue);
+        expect(setupAction.authorizationRequestCount, 1);
+        expect(
+          setupAction.events,
+          ['authorize', 'applyProfile', 'setCoreRunning:true'],
+        );
+      },
+    );
+
+    test(
+      'degrades cleanly without TUN when desktop start authorization fails',
+      () async {
+        late _AuthorizationSetupAction setupAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction([AuthorizeCode.error]);
+              return setupAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+
+        final started = await setupAction.setRunning(true);
+
+        expect(started, isTrue);
+        expect(setupAction.authorizationRequestCount, 1);
+        expect(
+          container.read(authorizedTunEnableProvider),
+          TunAuthorizationState.unauthorized,
+        );
+        expect(setupAction.events, ['authorize', 'setCoreRunning:true']);
+        expect(container.read(isStartProvider), isTrue);
+      },
+    );
+
+    test(
+      'non-desktop platform skips desktop TUN authorization and profile sync on start',
+      () async {
+        late _AuthorizationSetupAction setupAction;
+        final container = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            commonActionProvider.overrideWith(_RaceCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              setupAction = _AuthorizationSetupAction(
+                const [],
+                desktopPlatformOverride: false,
+                interceptApplyProfile: true,
+              );
+              return setupAction;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        container
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        container.read(setupActionProvider);
+
+        final started = await setupAction.setRunning(true);
+
+        expect(started, isTrue);
+        expect(setupAction.authorizationRequestCount, 0);
+        expect(setupAction.events, ['setCoreRunning:true']);
+      },
+    );
   });
 }
 
@@ -872,13 +1086,60 @@ final _restartFailure = Exception('restart failed');
 
 class _AuthorizationSetupAction extends SetupAction {
   final List<AuthorizeCode> authorizationResults;
+  final bool desktopPlatformOverride;
+  final bool interceptApplyProfile;
+  final Completer<AuthorizeCode>? pendingAuthorization;
+  final List<String> events = [];
   int authorizationRequestCount = 0;
 
-  _AuthorizationSetupAction(this.authorizationResults);
+  _AuthorizationSetupAction(
+    this.authorizationResults, {
+    this.desktopPlatformOverride = true,
+    this.interceptApplyProfile = false,
+    this.pendingAuthorization,
+  });
+
+  @override
+  bool get isDesktopPlatform => desktopPlatformOverride;
 
   @override
   Future<AuthorizeCode> authorizeCore() async {
-    return authorizationResults[authorizationRequestCount++];
+    authorizationRequestCount++;
+    events.add('authorize');
+    if (pendingAuthorization != null) {
+      return pendingAuthorization!.future;
+    }
+    return authorizationResults[authorizationRequestCount - 1];
+  }
+
+  @override
+  Future<bool> setCoreRunning(bool running) async {
+    events.add('setCoreRunning:$running');
+    return true;
+  }
+
+  @override
+  void applyProfileDebounce({bool silence = false, bool force = false}) {}
+
+  @override
+  void resetCoreTraffic() {}
+
+  @override
+  Future<bool> applyProfile({
+    bool silence = false,
+    bool force = false,
+    Future<void> Function()? preloadInvoke,
+  }) async {
+    if (!interceptApplyProfile) {
+      return super.applyProfile(
+        silence: silence,
+        force: force,
+        preloadInvoke: preloadInvoke,
+      );
+    }
+    events.add('applyProfile');
+    await preloadInvoke?.call();
+    return true;
   }
 }
 

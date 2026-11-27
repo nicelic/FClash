@@ -120,10 +120,51 @@ class TestSetupAction extends SetupAction {
   }
 }
 
+class _AndroidAuthorizationSetupAction extends SetupAction {
+  int authorizeCalls = 0;
+
+  @override
+  bool get isDesktopPlatform => false;
+
+  @override
+  Future<AuthorizeCode> authorizeCore() async {
+    authorizeCalls++;
+    return AuthorizeCode.error;
+  }
+}
+
+class _DeferredRecordingSetupAction extends SetupAction {
+  int authorizeCalls = 0;
+  AuthorizeCode authorizeResult = AuthorizeCode.error;
+
+  @override
+  bool get isDesktopPlatform => true;
+
+  @override
+  Future<AuthorizeCode> authorizeCore() async {
+    authorizeCalls++;
+    return authorizeResult;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
     registerFallbackValue(const SetupParams(selectedMap: {}, testUrl: ''));
+    registerFallbackValue(
+      const UpdateParams(
+        tun: Tun(),
+        mixedPort: 7890,
+        allowLan: false,
+        findProcessMode: FindProcessMode.off,
+        mode: Mode.rule,
+        logLevel: LogLevel.warning,
+        ipv6: false,
+        tcpConcurrent: false,
+        externalController: ExternalControllerStatus.close,
+        unifiedDelay: false,
+      ),
+    );
   });
 
   late TestSetupAction action;
@@ -408,6 +449,27 @@ void main() {
       expect(
         container.read(authorizedTunEnableProvider),
         TunAuthorizationState.unauthorized,
+      );
+    });
+
+    test('non-desktop platform skips authorization calls completely', () async {
+      final scoped = ProviderContainer(
+        overrides: [
+          setupActionProvider.overrideWith(
+            _AndroidAuthorizationSetupAction.new,
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+      final androidAction =
+          scoped.read(setupActionProvider.notifier)
+              as _AndroidAuthorizationSetupAction;
+
+      expect(await androidAction.requestAdmin(true), isTrue);
+      expect(androidAction.authorizeCalls, 0);
+      expect(
+        scoped.read(authorizedTunEnableProvider),
+        TunAuthorizationState.none,
       );
     });
   });
@@ -755,6 +817,181 @@ void main() {
         expect(messageAction.coreRunningCalls, [true, false]);
         expect(scoped.read(runTimeProvider), isNull);
         verify(() => core.setupConfig(any())).called(1);
+      },
+    );
+
+    test(
+      'applyProfile skips authorization and writes tun disabled while stopped',
+      () async {
+        final profile = Profile.normal(label: 'p');
+        final core = _MockCoreHandlerInterface();
+        when(() => core.getConfig(any())).thenAnswer((_) async => {});
+        String? writtenYaml;
+        when(() => core.setupConfig(any())).thenAnswer((_) async {
+          writtenYaml = await File(
+            await appPath.configFilePath,
+          ).readAsString();
+          return '';
+        });
+        globalState.packageInfo = PackageInfo(
+          appName: 'FClash',
+          packageName: 'com.nicelic.fclash',
+          version: '0.0.0',
+          buildNumber: '0',
+        );
+        final scoped = ProviderContainer(
+          overrides: [
+            profilesProvider.overrideWith(() => TestProfiles([profile])),
+            currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
+            setupStateProvider.overrideWith(
+              (_, profileId) =>
+                  nullProfileSetupState.copyWith(profileId: profileId),
+            ),
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            setupActionProvider.overrideWith(_DeferredRecordingSetupAction.new),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        scoped
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        final deferredAction =
+            scoped.read(setupActionProvider.notifier)
+                as _DeferredRecordingSetupAction;
+
+        final succeeded = await deferredAction.applyProfile(force: true);
+
+        expect(succeeded, isTrue);
+        expect(deferredAction.authorizeCalls, 0);
+        expect(
+          scoped.read(authorizedTunEnableProvider),
+          TunAuthorizationState.none,
+        );
+        expect(writtenYaml, isNotNull);
+        expect(writtenYaml, contains('enable: false'));
+      },
+    );
+
+    test(
+      'updateConfig skips elevation while stopped and pushes tun disabled',
+      () async {
+        final core = _MockCoreHandlerInterface();
+        UpdateParams? sentParams;
+        when(() => core.updateConfig(any())).thenAnswer((invocation) async {
+          sentParams = invocation.positionalArguments.first as UpdateParams;
+          return '';
+        });
+        final scoped = ProviderContainer(
+          overrides: [
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            setupActionProvider.overrideWith(_DeferredRecordingSetupAction.new),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        scoped
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        final deferredAction =
+            scoped.read(setupActionProvider.notifier)
+                as _DeferredRecordingSetupAction;
+
+        await deferredAction.updateConfig();
+
+        expect(deferredAction.authorizeCalls, 0);
+        expect(sentParams?.tun.enable, isFalse);
+      },
+    );
+
+    test(
+      'updateConfig forces desktop tun disabled on non-desktop even when running',
+      () async {
+        final core = _MockCoreHandlerInterface();
+        UpdateParams? sentParams;
+        when(() => core.updateConfig(any())).thenAnswer((invocation) async {
+          sentParams = invocation.positionalArguments.first as UpdateParams;
+          return '';
+        });
+        final scoped = ProviderContainer(
+          overrides: [
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            setupActionProvider.overrideWith(
+              _AndroidAuthorizationSetupAction.new,
+            ),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        scoped.read(runTimeProvider.notifier).value = 0;
+        scoped
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        final androidAction =
+            scoped.read(setupActionProvider.notifier)
+                as _AndroidAuthorizationSetupAction;
+
+        await androidAction.updateConfig();
+
+        expect(androidAction.authorizeCalls, 0);
+        expect(sentParams?.tun.enable, isFalse);
+      },
+    );
+
+    test(
+      'setRunning syncs tun enabled config before startListener when authorized without restart',
+      () async {
+        final profile = Profile.normal(label: 'p');
+        final core = _MockCoreHandlerInterface();
+        final calls = <String>[];
+        String? writtenYaml;
+        when(() => core.getConfig(any())).thenAnswer((_) async => {});
+        when(() => core.setupConfig(any())).thenAnswer((_) async {
+          calls.add('setupConfig');
+          writtenYaml = await File(
+            await appPath.configFilePath,
+          ).readAsString();
+          return '';
+        });
+        when(() => core.startListener()).thenAnswer((_) async {
+          calls.add('startListener');
+          return true;
+        });
+        globalState.packageInfo = PackageInfo(
+          appName: 'FClash',
+          packageName: 'com.nicelic.fclash',
+          version: '0.0.0',
+          buildNumber: '0',
+        );
+        final scoped = ProviderContainer(
+          overrides: [
+            initProvider.overrideWithBuild((_, _) => true),
+            profilesProvider.overrideWith(() => TestProfiles([profile])),
+            currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
+            setupStateProvider.overrideWith(
+              (_, profileId) =>
+                  nullProfileSetupState.copyWith(profileId: profileId),
+            ),
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            commonActionProvider.overrideWith(TestCommonAction.new),
+            setupActionProvider.overrideWith(() {
+              return _DeferredRecordingSetupAction()
+                ..authorizeResult = AuthorizeCode.none;
+            }),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        scoped
+            .read(patchClashConfigProvider.notifier)
+            .update((state) => state.copyWith.tun(enable: true));
+        final deferredAction =
+            scoped.read(setupActionProvider.notifier)
+                as _DeferredRecordingSetupAction;
+
+        final started = await deferredAction.setRunning(true);
+
+        expect(started, isTrue);
+        expect(deferredAction.authorizeCalls, 1);
+        expect(calls, ['setupConfig', 'startListener']);
+        expect(writtenYaml, isNotNull);
+        expect(writtenYaml, contains('enable: true'));
       },
     );
   });

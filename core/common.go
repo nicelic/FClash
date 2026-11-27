@@ -140,6 +140,7 @@ func updateListeners(cfg *config.Config) {
 	}
 	general := cfg.General
 	listener.PatchInboundListeners(cfg.Listeners, tunnel.Tunnel, true)
+	listener.PatchTunnel(cfg.Tunnels, tunnel.Tunnel)
 
 	listener.SetAllowLan(general.AllowLan)
 	inbound.SetSkipAuthPrefixes(general.SkipAuthPrefixes)
@@ -417,6 +418,34 @@ func loadConfig(path string) (*config.Config, error) {
 	return config.ParseRawConfig(rawCfg)
 }
 
+func inactiveConfigForApply(cfg *config.Config) *config.Config {
+	if cfg == nil {
+		return nil
+	}
+	copied := *cfg
+	if cfg.General != nil {
+		general := *cfg.General
+		general.Port = 0
+		general.SocksPort = 0
+		general.RedirPort = 0
+		general.TProxyPort = 0
+		general.MixedPort = 0
+		general.ShadowSocksConfig = ""
+		general.VmessConfig = ""
+		general.TuicServer = LC.TuicServer{}
+		general.Tun.Enable = false
+		copied.General = &general
+	}
+	if cfg.IPTables != nil {
+		iptables := *cfg.IPTables
+		iptables.Enable = false
+		copied.IPTables = &iptables
+	}
+	copied.Listeners = nil
+	copied.Tunnels = nil
+	return &copied
+}
+
 func applyConfig(params *SetupParams) error {
 	runtime.GC()
 	configMu.Lock()
@@ -443,10 +472,18 @@ func applyConfig(params *SetupParams) error {
 
 	currentConfig = cfg
 	wrapConfigProxies(cfg)
-	hub.ApplyConfig(cfg)
+	appliedConfig := cfg
+	if !isRunning.Load() {
+		appliedConfig = inactiveConfigForApply(cfg)
+	}
+	hub.ApplyConfig(appliedConfig)
 	syncTunnelSnapshotsFromTunnel(cfg.Controller.ExternalController == "")
 	patchSelectGroup(params.SelectedMap)
-	updateListeners(cfg)
+	if isRunning.Load() {
+		updateListeners(cfg)
+	} else {
+		stopListeners()
+	}
 	reconcileGeoUpdater()
 	notifyInitialProvidersLoaded()
 	startRuntimeObservers()

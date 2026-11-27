@@ -60,6 +60,38 @@ void main() {
     });
   });
 
+  group('isVirtualTun', () {
+    test('identifies common TUN and VPN interface names', () {
+      for (final name in [
+        'FClash',
+        'FlClash',
+        'wintun',
+        'utun0',
+        'utun3',
+        'tun0',
+        'tap0',
+        'wg0',
+        'tailscale0',
+      ]) {
+        expect(
+          _FakeInterface(name, const []).isVirtualTun,
+          isTrue,
+          reason: name,
+        );
+      }
+    });
+
+    test('does not misclassify physical LAN interfaces', () {
+      for (final name in ['Ethernet', '以太网', 'WLAN', 'Wi-Fi', 'en0', 'eth0']) {
+        expect(
+          _FakeInterface(name, const []).isVirtualTun,
+          isFalse,
+          reason: name,
+        );
+      }
+    });
+  });
+
   test('includesIPv4 only counts IPv4 addresses', () {
     expect(_FakeInterface('en1', [_v4('10.0.0.2')]).includesIPv4, isTrue);
     expect(_FakeInterface('en1', [_v6('fe80::1')]).includesIPv4, isFalse);
@@ -80,6 +112,30 @@ void main() {
 
       expect(await getLocalIpAddress(), '192.168.1.20');
     });
+
+    test(
+      'prefers a wired physical interface over virtual TUN interfaces',
+      () async {
+        listing([
+          _FakeInterface('FClash', [_v4('198.18.0.1')]),
+          _FakeInterface('utun0', [_v4('10.9.0.1')]),
+          _FakeInterface('以太网', [_v4('192.168.10.5')]),
+        ]);
+
+        expect(await getLocalIpAddress(), '192.168.10.5');
+      },
+    );
+
+    test(
+      'ignores the app TUN adapter and 198.18.0.0/15 range when alone',
+      () async {
+        listing([
+          _FakeInterface('FClash', [_v4('198.18.0.1'), _v6('fe80::1')]),
+        ]);
+
+        expect(await getLocalIpAddress(), '');
+      },
+    );
 
     test(
       'prefers an IPv4-carrying interface when neither is wireless',
@@ -146,6 +202,8 @@ void main() {
       listing([
         _FakeInterface('wlan0', [_v4('192.168.1.20')]),
         _FakeInterface('eth0', [_v4('10.0.0.5')]),
+        _FakeInterface('FClash', [_v4('198.18.0.1')]),
+        _FakeInterface('utun0', [_v4('10.9.0.1')]),
         _FakeInterface('apipa', [_v4('169.254.1.5')]),
         _FakeInterface('linklocal6', [_v6('fe80::1%eth0')]),
         _FakeInterface('empty', const []),
