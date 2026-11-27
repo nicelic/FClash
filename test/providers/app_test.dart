@@ -519,6 +519,47 @@ void main() {
         expect(container.read(networkDetectionProvider).isLoading, false);
       },
     );
+
+    test('toggles privacy mask and detects exit IP drift without flicker', () async {
+      final adapter = _DriftIpAdapter();
+      request.dio.httpClientAdapter = adapter;
+      final container = ProviderContainer(
+        overrides: [
+          initProvider.overrideWithBuild((_, _) => true),
+          runTimeProvider.overrideWithBuild((_, _) => 1),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(networkDetectionProvider.notifier);
+      notifier.startCheck(immediate: true);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '94.118.188.128');
+      expect(container.read(networkDetectionProvider).isLoading, isFalse);
+
+      notifier.toggleIpPrivacy();
+      expect(container.read(networkDetectionProvider).isIpMasked, isTrue);
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '10.0.0.108');
+      notifier.toggleIpPrivacy();
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '94.118.188.128');
+
+      final checksBeforeUnchangedProbe = adapter.detailBatches;
+      await notifier.probeForDrift();
+      expect(adapter.detailBatches, checksBeforeUnchangedProbe);
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '94.118.188.128');
+
+      adapter.currentIp = '203.0.113.9';
+      await notifier.probeForDrift();
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '203.0.113.9');
+      expect(container.read(networkDetectionProvider).isRefreshing, isFalse);
+
+      adapter.currentIp = '198.51.100.42';
+      notifier.manualRefresh();
+      expect(container.read(networkDetectionProvider).ipInfo, isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(container.read(networkDetectionProvider).ipInfo?.ip, '198.51.100.42');
+    });
   });
 
   group('CoreVersion provider', () {
@@ -613,6 +654,51 @@ class _DelayedCancelIpAdapter implements HttpClientAdapter {
       const Duration(milliseconds: 10),
       () => ResponseBody.fromString(
         '{"ip":"2.2.2.2","country_code":"US"}',
+        200,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      ),
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _DriftIpAdapter implements HttpClientAdapter {
+  String currentIp = '94.118.188.128';
+  int detailBatches = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final uri = options.uri.toString();
+    if (uri.contains('cdn-cgi/trace')) {
+      return ResponseBody.fromString('fl=1\nip=$currentIp\nloc=SG\n', 200);
+    }
+    if (uri.contains('ipify.org')) {
+      return ResponseBody.fromString(
+        '{"ip":"$currentIp"}',
+        200,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+    if (uri.contains('ipwho.is')) {
+      detailBatches++;
+    }
+    final payload = uri.contains('ip-api.com')
+        ? '{"query":"$currentIp","countryCode":"SG","country":"Singapore"}'
+        : '{"ip":"$currentIp","country_code":"SG","country":"Singapore","countryCode":"SG","cc":"SG"}';
+    return Future.delayed(
+      const Duration(milliseconds: 5),
+      () => ResponseBody.fromString(
+        payload,
         200,
         headers: {
           Headers.contentTypeHeader: ['application/json'],

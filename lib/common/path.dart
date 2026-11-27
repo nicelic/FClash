@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 
 class AppPath {
   static AppPath? _instance;
+  static bool get isInitialized => _instance != null;
+
   Completer<Directory> dataDir = Completer();
   late final Future<Directory?> _downloadDir = downloadDirectory();
   Completer<Directory> tempDir = Completer();

@@ -316,6 +316,19 @@ enum FunctionTag {
   removeProxy,
   suspend,
   coreErrorNotifier,
+  checkIpRisk,
+}
+
+enum DashboardTileSize {
+  small(1, 1),
+  wide(2, 1),
+  tall(1, 2),
+  large(2, 2);
+
+  final int cross;
+  final int rows;
+
+  const DashboardTileSize(this.cross, this.rows);
 }
 
 enum DashboardWidget {
@@ -333,6 +346,61 @@ enum DashboardWidget {
   final List<SupportPlatform> platforms;
 
   const DashboardWidget({this.platforms = SupportPlatform.values});
+
+  static const _variantGroups = [
+    [outboundModeV2, outboundMode],
+  ];
+
+  List<DashboardWidget> get variants => _variantGroups.firstWhere(
+    (group) => group.contains(this),
+    orElse: () => [this],
+  );
+
+  DashboardWidget get family =>
+      variants.reduce((a, b) => a.index <= b.index ? a : b);
+
+  DashboardTileSize get nativeSize => switch (this) {
+    networkSpeed => DashboardTileSize.large,
+    outboundModeV2 => DashboardTileSize.wide,
+    outboundMode || trafficUsage => DashboardTileSize.tall,
+    _ => DashboardTileSize.small,
+  };
+
+  List<DashboardTileSize> get sizes => switch (family) {
+    networkSpeed => const [
+      DashboardTileSize.small,
+      DashboardTileSize.wide,
+      DashboardTileSize.tall,
+      DashboardTileSize.large,
+    ],
+    outboundModeV2 || outboundMode => const [
+      DashboardTileSize.tall,
+      DashboardTileSize.wide,
+    ],
+    trafficUsage => const [
+      DashboardTileSize.tall,
+      DashboardTileSize.wide,
+    ],
+    networkDetection => const [
+      DashboardTileSize.small,
+      DashboardTileSize.wide,
+      DashboardTileSize.tall,
+      DashboardTileSize.large,
+    ],
+    intranetIp || memoryInfo => const [
+      DashboardTileSize.small,
+      DashboardTileSize.wide,
+      DashboardTileSize.tall,
+    ],
+    _ => [nativeSize],
+  };
+
+  bool get resizable => sizes.length > 1;
+
+  DashboardWidget variantFor(DashboardTileSize size) => variants.firstWhere(
+    (item) => item.nativeSize == size,
+    orElse: () => family,
+  );
 }
 
 enum GeodataLoader { standard, memconservative }
@@ -583,4 +651,27 @@ enum ItemPosition {
     final int visualIndex = currentIndex - deletedCountBeforeMe;
     return ItemPosition.get(visualIndex, visualLength);
   }
+}
+
+enum IpCategory { public, lan, tun }
+
+enum IpRiskLevel { low, medium, high, veryHigh }
+
+enum IpRiskGroup { datacenter, blacklist, proxy }
+
+enum IpRiskAmount { low, medium, high }
+
+enum IpRiskShare { little, some, almostAll }
+
+enum IpRiskConnection { server, vpn, publicProxy, tor, webProxy }
+
+enum IpCheckInterval {
+  off(null),
+  oneMinute(Duration(minutes: 1)),
+  threeMinutes(Duration(minutes: 3)),
+  fiveMinutes(Duration(minutes: 5));
+
+  final Duration? duration;
+
+  const IpCheckInterval(this.duration);
 }

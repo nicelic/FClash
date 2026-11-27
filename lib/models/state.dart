@@ -98,6 +98,11 @@ abstract class NetworkDetectionState with _$NetworkDetectionState {
   const factory NetworkDetectionState({
     required bool isLoading,
     required IpInfo? ipInfo,
+    @Default(false) bool isRefreshing,
+    @Default(false) bool isIpMasked,
+    String? errorMessage,
+    String? riskyIp,
+    IpRiskLevel? riskLevel,
   }) = _NetworkDetectionState;
 }
 
@@ -289,6 +294,7 @@ abstract class CurrentProfileSelectorState with _$CurrentProfileSelectorState {
 abstract class DashboardState with _$DashboardState {
   const factory DashboardState({
     required List<DashboardWidget> dashboardWidgets,
+    @Default({}) Map<String, DashboardTileSize> dashboardWidgetSizes,
   }) = _DashboardState;
 }
 

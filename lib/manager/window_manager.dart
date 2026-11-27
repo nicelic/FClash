@@ -3,6 +3,7 @@ import 'dart:ui' show ClipOp;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/launch.dart';
+import 'package:fl_clash/common/window.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/config.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -45,7 +46,16 @@ class _WindowContainerState extends ConsumerState<WindowManager>
         });
       }
     });
+    window?.visibleNotifier.addListener(_handleWindowVisibleChanged);
     windowManager.addListener(this);
+  }
+
+  void _handleWindowVisibleChanged() {
+    final visible = window?.visibleNotifier.value ?? true;
+    ref.read(windowVisibleProvider.notifier).value = visible;
+    if (visible) {
+      unawaited(ref.read(networkDetectionProvider.notifier).probeOnResume());
+    }
   }
 
   @override
@@ -58,7 +68,9 @@ class _WindowContainerState extends ConsumerState<WindowManager>
   void onWindowFocus() {
     super.onWindowFocus();
     commonPrint.log('focus');
+    ref.read(windowVisibleProvider.notifier).value = true;
     render?.resume();
+    unawaited(ref.read(networkDetectionProvider.notifier).probeOnResume());
   }
 
   /// Another launch, or a Dock reopen, asked for the window; showing it from
@@ -169,6 +181,7 @@ class _WindowContainerState extends ConsumerState<WindowManager>
   @override
   void onWindowMinimize() async {
     _invalidateWindowGeometryCapture();
+    ref.read(windowVisibleProvider.notifier).value = false;
     ref.read(storeActionProvider.notifier).savePreferencesDebounce();
     commonPrint.log('minimize');
     render?.pause();
@@ -178,7 +191,9 @@ class _WindowContainerState extends ConsumerState<WindowManager>
   @override
   void onWindowRestore() {
     commonPrint.log('restore');
+    ref.read(windowVisibleProvider.notifier).value = true;
     render?.resume();
+    unawaited(ref.read(networkDetectionProvider.notifier).probeOnResume());
     super.onWindowRestore();
     _scheduleWindowGeometryCapture();
   }
@@ -186,6 +201,7 @@ class _WindowContainerState extends ConsumerState<WindowManager>
   @override
   void dispose() {
     _invalidateWindowGeometryCapture();
+    window?.visibleNotifier.removeListener(_handleWindowVisibleChanged);
     windowManager.removeListener(this);
     super.dispose();
   }

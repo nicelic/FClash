@@ -13,8 +13,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class MemoryInfo extends ConsumerStatefulWidget {
   final Future<num> Function()? memoryReader;
+  final DashboardTileSize? size;
 
-  const MemoryInfo({super.key, @visibleForTesting this.memoryReader});
+  const MemoryInfo({
+    super.key,
+    @visibleForTesting this.memoryReader,
+    this.size,
+  });
 
   @override
   ConsumerState<MemoryInfo> createState() => _MemoryInfoState();
@@ -23,6 +28,7 @@ class MemoryInfo extends ConsumerStatefulWidget {
 class _MemoryInfoState extends ConsumerState<MemoryInfo>
     with WidgetsBindingObserver, ActivePollingMixin<MemoryInfo> {
   final _memoryStateNotifier = ValueNotifier<num>(0);
+  final List<double> _history = [];
 
   CoreController get _core => ref.read(coreHandlerProvider);
 
@@ -40,6 +46,10 @@ class _MemoryInfoState extends ConsumerState<MemoryInfo>
     final memory = await _readMemory();
     if (memory == null || !isCurrent()) {
       return;
+    }
+    _history.add(memory.toDouble());
+    if (_history.length > trafficSampleLength) {
+      _history.removeAt(0);
     }
     _memoryStateNotifier.value = memory;
   }
@@ -66,55 +76,128 @@ class _MemoryInfoState extends ConsumerState<MemoryInfo>
     return rss;
   }
 
+  List<Point> _buildPoints(num current) {
+    final samples = _history.isEmpty
+        ? <double>[current.toDouble(), current.toDouble()]
+        : _history.length == 1
+        ? <double>[_history.first, _history.first]
+        : _history;
+    return [
+      for (final (index, value) in samples.indexed)
+        Point(index.toDouble(), value),
+    ];
+  }
+
+  Widget _buildValueText(BuildContext context, num memory) {
+    final traffic = memory.traffic;
+    final style = context.textTheme.bodyMedium?.toLight.adjustSize(1);
+    return SizedBox(
+      height: globalState.measure.bodyMediumHeight + 2,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Text(traffic.value, style: style),
+          const SizedBox(width: 8),
+          Text(traffic.unit, style: style),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appLocalizations = context.appLocalizations;
+    final effectiveSize = widget.size ?? DashboardTileSize.small;
+    final lines = effectiveSize == DashboardTileSize.tall ? 2 : 1;
+
     return SizedBox(
-      height: getWidgetHeight(1),
+      height: getWidgetHeight(lines),
       child: RepaintBoundary(
         child: CommonCard(
           radius: AppCorner.lg,
-          info: Info(
-            iconData: Icons.memory,
-            label: appLocalizations.memoryInfo,
-          ),
+          info: effectiveSize == DashboardTileSize.wide
+              ? null
+              : Info(
+                  iconData: Icons.memory,
+                  label: appLocalizations.memoryInfo,
+                ),
           onPressed: () {
             _core.requestGc();
           },
-          child: Container(
-            padding: baseInfoEdgeInsets.copyWith(top: 0),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: globalState.measure.bodyMediumHeight + 2,
-                  child: ValueListenableBuilder(
-                    valueListenable: _memoryStateNotifier,
-                    builder: (_, memory, _) {
-                      final traffic = memory.traffic;
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Text(
-                            traffic.value,
-                            style: context.textTheme.bodyMedium?.toLight
-                                .adjustSize(1),
+          child: ValueListenableBuilder(
+            valueListenable: _memoryStateNotifier,
+            builder: (_, memory, _) {
+              final points = _buildPoints(memory);
+              return switch (effectiveSize) {
+                DashboardTileSize.wide => Padding(
+                  padding: EdgeInsets.only(left: 16.mAp, right: 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.max,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InfoHeader(
+                              padding: EdgeInsets.only(top: 16.mAp),
+                              info: Info(
+                                iconData: Icons.memory,
+                                label: appLocalizations.memoryInfo,
+                              ),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.only(bottom: 16.mAp),
+                              child: _buildValueText(context, memory),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: LineChart(
+                            gradient: true,
+                            color: context.colorScheme.primary,
+                            points: points,
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            traffic.unit,
-                            style: context.textTheme.bodyMedium?.toLight
-                                .adjustSize(1),
-                          ),
-                        ],
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+                DashboardTileSize.tall => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: baseInfoEdgeInsets.copyWith(top: 0, bottom: 0),
+                      child: _buildValueText(context, memory),
+                    ),
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: LineChart(
+                          gradient: true,
+                          color: context.colorScheme.primary,
+                          points: points,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                DashboardTileSize.small || DashboardTileSize.large => Container(
+                  padding: baseInfoEdgeInsets.copyWith(top: 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [_buildValueText(context, memory)],
+                  ),
+                ),
+              };
+            },
           ),
         ),
       ),

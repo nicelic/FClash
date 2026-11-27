@@ -59,7 +59,13 @@ DashboardState dashboardState(Ref ref) {
   final dashboardWidgets = ref.watch(
     appSettingProvider.select((state) => state.dashboardWidgets),
   );
-  return DashboardState(dashboardWidgets: dashboardWidgets);
+  final dashboardWidgetSizes = ref.watch(
+    appSettingProvider.select((state) => state.dashboardWidgetSizes),
+  );
+  return DashboardState(
+    dashboardWidgets: dashboardWidgets,
+    dashboardWidgetSizes: dashboardWidgetSizes,
+  );
 }
 
 @riverpod

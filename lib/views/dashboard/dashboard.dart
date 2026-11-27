@@ -36,23 +36,35 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
   void initState() {
     super.initState();
     ref.listenManual(
-      dashboardStateProvider.select((state) => state.dashboardWidgets),
-      (_, dashboardWidgets) => _syncAddedWidgets(dashboardWidgets),
+      dashboardStateProvider.select(
+        (state) => (state.dashboardWidgets, state.dashboardWidgetSizes),
+      ),
+      (_, value) => _syncAddedWidgets(value.$1, value.$2),
       fireImmediately: true,
     );
   }
 
-  void _syncAddedWidgets(List<DashboardWidget> dashboardWidgets) {
+  void _syncAddedWidgets(
+    List<DashboardWidget> dashboardWidgets,
+    Map<String, DashboardTileSize> sizes,
+  ) {
     bool onThisPlatform(DashboardWidget item) =>
         item.platforms.contains(SupportPlatform.currentPlatform);
-    final shown = dashboardWidgets
+    final shownFamilies = dashboardWidgets
         .where(onThisPlatform)
-        .map((item) => item.widget)
+        .map((item) => item.family)
         .toSet();
-    _addedWidgetsNotifier.value = DashboardWidget.values
-        .where((item) => onThisPlatform(item) && !shown.contains(item.widget))
-        .map((item) => item.widget)
-        .toList();
+    final added = <GridItem>[];
+    final seenFamilies = <DashboardWidget>{};
+    for (final item in DashboardWidget.values.where(onThisPlatform)) {
+      final family = item.family;
+      if (shownFamilies.contains(family) || !seenFamilies.add(family)) {
+        continue;
+      }
+      final size = resolveDashboardSize(item, sizes);
+      added.add(buildDashboardTile(item.variantFor(size), size));
+    }
+    _addedWidgetsNotifier.value = added;
   }
 
   @override
@@ -198,6 +210,47 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
         .update((state) => state.copyWith(dashboardWidgets: dashboardWidgets));
   }
 
+  void _resizeWidget(int index) {
+    final liveChildren = key.currentState?.snapshotChildren;
+    final currentWidgets = liveChildren != null
+        ? liveChildren.map(dashboardWidgetOf).toList()
+        : ref
+              .read(dashboardStateProvider)
+              .dashboardWidgets
+              .where(
+                (item) =>
+                    item.platforms.contains(SupportPlatform.currentPlatform),
+              )
+              .toList();
+    if (index < 0 || index >= currentWidgets.length) {
+      return;
+    }
+    final target = currentWidgets[index];
+    final sizes = target.sizes;
+    if (sizes.length < 2) {
+      return;
+    }
+    final appSetting = ref.read(appSettingProvider);
+    final currentSize = resolveDashboardSize(
+      target,
+      appSetting.dashboardWidgetSizes,
+    );
+    final currentIndex = sizes.indexOf(currentSize);
+    final nextSize = sizes[(currentIndex + 1) % sizes.length];
+    final nextVariant = target.variantFor(nextSize);
+    final updatedWidgets = List<DashboardWidget>.of(currentWidgets);
+    updatedWidgets[index] = nextVariant;
+    final nextSizes = Map<String, DashboardTileSize>.of(
+      appSetting.dashboardWidgetSizes,
+    )..[target.family.name] = nextSize;
+    ref.read(appSettingProvider.notifier).update(
+          (state) => state.copyWith(
+            dashboardWidgets: updatedWidgets,
+            dashboardWidgetSizes: nextSizes,
+          ),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dashboardState = ref.watch(dashboardStateProvider);
@@ -207,7 +260,12 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           .where(
             (item) => item.platforms.contains(SupportPlatform.currentPlatform),
           )
-          .map((item) => item.widget),
+          .map(
+            (item) => buildDashboardTile(
+              item,
+              resolveDashboardSize(item, dashboardState.dashboardWidgetSizes),
+            ),
+          ),
     ];
     return _buildIsEdit(
       (isEdit) => CommonScaffold(
@@ -241,6 +299,18 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                                 crossAxisSpacing: spacing,
                                 mainAxisSpacing: spacing,
                                 children: children,
+                                canResize: (index) {
+                                  final list =
+                                      key.currentState?.snapshotChildren ??
+                                      children;
+                                  if (index < 0 || index >= list.length) {
+                                    return false;
+                                  }
+                                  return dashboardWidgetOf(
+                                    list[index],
+                                  ).resizable;
+                                },
+                                onResize: _resizeWidget,
                                 onUpdate: () {
                                   _handleSave();
                                 },
@@ -310,24 +380,8 @@ class _AddedContainer extends StatefulWidget {
 }
 
 class _AddedContainerState extends State<_AddedContainer> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void didUpdateWidget(_AddedContainer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.child != widget.child) {}
-  }
-
   Future<void> _handleAdd() async {
     widget.onAdd();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 
   @override

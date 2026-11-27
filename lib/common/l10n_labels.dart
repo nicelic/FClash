@@ -98,6 +98,18 @@ extension RestoreStrategyL10n on RestoreStrategy {
   }
 }
 
+extension IpCheckIntervalL10n on IpCheckInterval {
+  String get label {
+    final appLocalizations = currentAppLocalizations;
+    return switch (this) {
+      IpCheckInterval.off => appLocalizations.ipCheckIntervalOff,
+      IpCheckInterval.oneMinute => appLocalizations.ipCheckInterval1m,
+      IpCheckInterval.threeMinutes => appLocalizations.ipCheckInterval3m,
+      IpCheckInterval.fiveMinutes => appLocalizations.ipCheckInterval5m,
+    };
+  }
+}
+
 extension DynamicSchemeVariantL10n on DynamicSchemeVariant {
   String get label {
     final appLocalizations = currentAppLocalizations;

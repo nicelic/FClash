@@ -199,4 +199,55 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), null);
   });
+
+  testWidgets('SuperGrid supports per-item resize action and external sync', (
+    tester,
+  ) async {
+    final key = GlobalKey<SuperGridState>();
+    var updates = 0;
+    var items = [_item('A', crossAxisCellCount: 2), _item('B', crossAxisCellCount: 2)];
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => TestApp(
+          child: Scaffold(
+            body: SingleChildScrollView(
+              child: SuperGrid(
+                key: key,
+                crossAxisCount: 4,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                onUpdate: () => updates++,
+                canResize: (index) => index == 0,
+                onResize: (index) {
+                  setState(() {
+                    items = [
+                      _item('A', crossAxisCellCount: 4),
+                      items[1],
+                    ];
+                  });
+                },
+                children: items,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.open_in_full_rounded), findsOneWidget);
+    final resizeButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.open_in_full_rounded),
+        matching: find.byType(IconButton),
+      ),
+    );
+    resizeButton.onPressed!();
+    await tester.pump();
+
+    expect(key.currentState!.snapshotChildren.first.crossAxisCellCount, 4);
+    expect(updates, 0);
+    expect(tester.takeException(), null);
+  });
 }

@@ -61,6 +61,27 @@ List<DashboardWidget> dashboardWidgetsSafeFormJson(
   );
 }
 
+Map<String, DashboardTileSize> dashboardWidgetSizesSafeFromJson(Object? raw) {
+  if (raw is! Map) {
+    return const {};
+  }
+  final result = <String, DashboardTileSize>{};
+  for (final entry in raw.entries) {
+    final key = entry.key?.toString();
+    final value = entry.value?.toString();
+    if (key == null || value == null) {
+      continue;
+    }
+    for (final item in DashboardTileSize.values) {
+      if (item.name == value) {
+        result[key] = item;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 @freezed
 abstract class AppSettingProps with _$AppSettingProps {
   const factory AppSettingProps({
@@ -68,6 +89,9 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(defaultDashboardWidgets)
     @JsonKey(fromJson: dashboardWidgetsSafeFormJson)
     List<DashboardWidget> dashboardWidgets,
+    @Default({})
+    @JsonKey(fromJson: dashboardWidgetSizesSafeFromJson)
+    Map<String, DashboardTileSize> dashboardWidgetSizes,
     @Default(false) bool onlyStatisticsProxy,
     @Default(true) bool showNotificationStopAction,
     @Default(false) bool autoLaunch,
@@ -92,6 +116,11 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(ConnectionSortMode.defaultTimeDesc)
     @JsonKey(unknownEnumValue: ConnectionSortMode.defaultTimeDesc)
     ConnectionSortMode connectionSortMode,
+    @Default(false) bool ipRiskAlert,
+    @Default(false) bool ipRiskDetail,
+    @Default(IpCheckInterval.threeMinutes)
+    @JsonKey(unknownEnumValue: IpCheckInterval.threeMinutes)
+    IpCheckInterval ipCheckInterval,
   }) = _AppSettingProps;
 
   factory AppSettingProps.fromJson(Map<String, Object?> json) =>

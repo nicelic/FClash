@@ -301,6 +301,44 @@ void main() {
         () => IpInfo.fromIpApiCoJson({'ip': '1.1.1.1'}),
         throwsFormatException,
       );
+      expect(
+        () => IpInfo.fromCloudflareTrace('fl=1\nloc=US\n'),
+        throwsFormatException,
+      );
+    });
+
+    test('parses rich fields, trace fallback, merge, and size settings', () {
+      final trace = IpInfo.fromCloudflareTrace('ip=94.118.188.128\nloc=sg\n');
+      final geo = IpInfo.fromGeoJsJson({
+        'ip': '94.118.188.128',
+        'country_code': 'SG',
+        'country': 'Singapore',
+        'region': 'North West',
+        'city': 'Singapore',
+        'organization_name': 'Company 68c242',
+        'asn': 142433,
+      });
+
+      expect(trace.hasDetails, isFalse);
+      expect(geo.hasDetails, isTrue);
+      expect(geo.asn, 'AS142433');
+      expect(trace.merge(geo), geo);
+      expect(IpInfo.normalizeCountryCode('CN', '台湾', null), 'TW');
+
+      final sizes = dashboardWidgetSizesSafeFromJson({
+        'networkDetection': 'large',
+        'trafficUsage': 'wide',
+        'bad': 'unknownSize',
+      });
+      expect(sizes, const {
+        'networkDetection': DashboardTileSize.large,
+        'trafficUsage': DashboardTileSize.wide,
+      });
+
+      const settings = AppSettingProps();
+      expect(settings.ipRiskAlert, isFalse);
+      expect(settings.ipRiskDetail, isFalse);
+      expect(settings.ipCheckInterval, IpCheckInterval.threeMinutes);
     });
   });
 

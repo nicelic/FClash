@@ -19,6 +19,8 @@ export 'grid.dart';
 export 'icon.dart';
 export 'inherited.dart';
 export 'input.dart';
+export 'ip_detail_dialog.dart';
+export 'ip_risk.dart';
 export 'keep_scope.dart';
 export 'keyed_animated_list.dart';
 export 'line_chart.dart';

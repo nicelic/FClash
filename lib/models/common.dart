@@ -486,42 +486,338 @@ extension ColorSchemesExt on ColorSchemes {
 }
 
 @freezed
+abstract class IpRiskCheck with _$IpRiskCheck {
+  const factory IpRiskCheck({
+    required IpRiskGroup group,
+    required String name,
+    bool? hit,
+  }) = _IpRiskCheck;
+
+  factory IpRiskCheck.fromJson(Map<String, Object?> json) =>
+      _$IpRiskCheckFromJson(json);
+}
+
+@freezed
+abstract class IpRiskNote with _$IpRiskNote {
+  const factory IpRiskNote({
+    bool? direct,
+    @Default('') String isp,
+    IpRiskAmount? amount,
+    IpRiskShare? share,
+    @Default('') String operatorName,
+    IpRiskLevel? operatorLevel,
+    @Default('') String ownerName,
+    IpRiskLevel? ownerLevel,
+    IpRiskConnection? connection,
+    IpRiskLevel? warning,
+  }) = _IpRiskNote;
+
+  factory IpRiskNote.fromJson(Map<String, Object?> json) =>
+      _$IpRiskNoteFromJson(json);
+}
+
+@freezed
+abstract class IpRisk with _$IpRisk {
+  const factory IpRisk({
+    required String ip,
+    required int score,
+    required IpRiskLevel level,
+    @Default('') String hostname,
+    @Default('') String asn,
+    @Default('') String isp,
+    @Default('') String organization,
+    @Default('') String country,
+    @Default('') String countryCode,
+    @Default('') String region,
+    @Default('') String city,
+    @Default([]) List<IpRiskCheck> checks,
+    IpRiskNote? note,
+  }) = _IpRisk;
+
+  factory IpRisk.fromJson(Map<String, Object?> json) => _$IpRiskFromJson(json);
+}
+
+extension IpRiskExt on IpRisk {
+  bool get isHomeBroadband =>
+      checks.isNotEmpty &&
+      checks.any((check) => check.group == IpRiskGroup.datacenter) &&
+      checks.every((check) => check.hit != true);
+
+  int get displayScore => !isHomeBroadband && score == 0 ? 1 : score;
+
+  IpRisk get normalized =>
+      !isHomeBroadband && score == 0 ? copyWith(score: 1) : this;
+}
+
+String? _nonEmptyString(Object? value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+  return text;
+}
+
+String? _extractAsn(Object? value) {
+  final raw = _nonEmptyString(value);
+  if (raw == null) {
+    return null;
+  }
+  final match = RegExp(r'^(AS\d+)', caseSensitive: false).firstMatch(raw);
+  if (match != null) {
+    return match.group(1)!.toUpperCase();
+  }
+  if (RegExp(r'^\d+$').hasMatch(raw)) {
+    return 'AS$raw';
+  }
+  return null;
+}
+
+(String? asn, String? orgName) _splitOrgAsn(Object? value) {
+  final raw = _nonEmptyString(value);
+  if (raw == null) {
+    return (null, null);
+  }
+  final match = RegExp(
+    r'^(AS\d+)\s*(.*)$',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (match == null) {
+    return (null, raw);
+  }
+  final asn = match.group(1)!.toUpperCase();
+  final rest = _nonEmptyString(match.group(2));
+  return (asn, rest);
+}
+
+@freezed
 abstract class IpInfo with _$IpInfo {
-  const factory IpInfo({required String ip, required String countryCode}) =
-      _IpInfo;
+  const factory IpInfo({
+    required String ip,
+    required String countryCode,
+    String? country,
+    String? province,
+    String? city,
+    String? isp,
+    String? asn,
+    String? asName,
+    String? asDomain,
+  }) = _IpInfo;
+
+  factory IpInfo.fromJson(Map<String, Object?> json) => _$IpInfoFromJson(json);
+
+  static String normalizeCountryCode(
+    String countryCode, [
+    String? country,
+    String? province,
+  ]) {
+    final clean = countryCode.trim().toUpperCase();
+    if (clean.length == 2 && RegExp(r'^[A-Z]{2}$').hasMatch(clean)) {
+      if (clean == 'CN') {
+        if (_isTaiwanLabel(province) || _isTaiwanLabel(country)) {
+          return 'TW';
+        }
+        if (province == '香港' || country == '香港') return 'HK';
+        if (province == '澳门' ||
+            province == '澳門' ||
+            country == '澳门' ||
+            country == '澳門') {
+          return 'MO';
+        }
+      }
+      return clean;
+    }
+    if (_isTaiwanLabel(clean) ||
+        _isTaiwanLabel(country) ||
+        _isTaiwanLabel(province)) {
+      return 'TW';
+    }
+    if (clean == 'HK' ||
+        clean == 'HKG' ||
+        country == '香港' ||
+        province == '香港') {
+      return 'HK';
+    }
+    if (clean == 'MO' ||
+        clean == 'MAC' ||
+        clean == 'MFM' ||
+        country == '澳门' ||
+        country == '澳門' ||
+        province == '澳门' ||
+        province == '澳門') {
+      return 'MO';
+    }
+    return clean;
+  }
+
+  static String? normalizeCountry(
+    String? country, [
+    String? countryCode,
+    String? province,
+  ]) {
+    final effectiveCode = countryCode?.trim().toUpperCase();
+    if (country == null || country.trim().isEmpty) {
+      if (effectiveCode == 'TW' || _isTaiwanLabel(province)) {
+        return '台湾 (中国)';
+      }
+      return null;
+    }
+    final trimmed = country.trim();
+    if (trimmed == '台湾 (中国)' ||
+        trimmed == '台灣 (中国)' ||
+        trimmed == '臺灣 (中国)' ||
+        trimmed == 'Taiwan (China)' ||
+        trimmed == '中国台湾' ||
+        trimmed == '中國台灣' ||
+        trimmed == '中國臺灣') {
+      return trimmed;
+    }
+    final lower = trimmed.toLowerCase();
+    if (lower == 'taiwan' ||
+        lower == 'republic of china' ||
+        lower == 'republic of china (taiwan)' ||
+        lower == 'taiwan (roc)' ||
+        lower == 'taiwan, roc' ||
+        lower == 'roc' ||
+        lower == 'taiwan, province of china' ||
+        lower == 'taiwan, china') {
+      return 'Taiwan (China)';
+    }
+    if (trimmed == '中華民國' ||
+        trimmed.contains('中華民國') ||
+        trimmed == '台灣' ||
+        trimmed == '臺灣') {
+      return '台灣 (中国)';
+    }
+    if (trimmed == '中华民国' ||
+        trimmed.contains('中华民国') ||
+        trimmed == '台湾') {
+      return '台湾 (中国)';
+    }
+    if (trimmed == '台湾省') {
+      return '台湾省 (中国)';
+    }
+    if (trimmed == '台灣省' || trimmed == '臺灣省') {
+      return '台灣省 (中国)';
+    }
+    return trimmed;
+  }
+
+  static bool _isTaiwanLabel(String? text) {
+    if (text == null || text.trim().isEmpty) {
+      return false;
+    }
+    final trimmed = text.trim();
+    final lower = trimmed.toLowerCase();
+    return lower == 'tw' ||
+        lower == 'twn' ||
+        lower == 'taiwan' ||
+        lower.contains('taiwan') ||
+        trimmed.contains('台湾') ||
+        trimmed.contains('台灣') ||
+        trimmed.contains('臺灣') ||
+        trimmed.contains('中华民国') ||
+        trimmed.contains('中華民國');
+  }
 
   static IpInfo fromIpInfoIoJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'country': final String country} => IpInfo(
+    if (json case {'ip': final String ip, 'country': final String country}) {
+      final (asn, orgName) = _splitOrgAsn(json['org']);
+      final countryName = _nonEmptyString(json['country_name']);
+      final province = _nonEmptyString(json['region']);
+      return IpInfo(
         ip: ip,
-        countryCode: country,
-      ),
-      _ => throw const FormatException('invalid json'),
-    };
+        countryCode: normalizeCountryCode(country, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, country, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: orgName,
+        asn: asn,
+        asName: orgName,
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromIpApiCoJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'country_code': final String countryCode} =>
-        IpInfo(ip: ip, countryCode: countryCode),
-      _ => throw const FormatException('invalid json'),
-    };
+    if (json case {
+      'ip': final String ip,
+      'country_code': final String countryCode,
+    }) {
+      final countryName = _nonEmptyString(json['country_name']);
+      final province = _nonEmptyString(json['region']);
+      final org = _nonEmptyString(json['org']);
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: org,
+        asn: _extractAsn(json['asn']),
+        asName: org,
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromIpSbJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'country_code': final String countryCode} =>
-        IpInfo(ip: ip, countryCode: countryCode),
-      _ => throw const FormatException('invalid json'),
-    };
+    if (json case {
+      'ip': final String ip,
+      'country_code': final String countryCode,
+    }) {
+      final countryName = _nonEmptyString(json['country']);
+      final province = _nonEmptyString(json['region']);
+      final org =
+          _nonEmptyString(json['organization']) ?? _nonEmptyString(json['isp']);
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: _nonEmptyString(json['isp']) ?? org,
+        asn: _extractAsn(json['asn']),
+        asName: _nonEmptyString(json['asn_organization']) ?? org,
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromIpWhoIsJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'country_code': final String countryCode} =>
-        IpInfo(ip: ip, countryCode: countryCode),
-      _ => throw const FormatException('invalid json'),
-    };
+    if (json['success'] == false) {
+      throw const FormatException('invalid json');
+    }
+    if (json case {
+      'ip': final String ip,
+      'country_code': final String countryCode,
+    }) {
+      final conn = json['connection'];
+      final connMap = conn is Map ? conn : null;
+      final countryName = _nonEmptyString(json['country']);
+      final province = _nonEmptyString(json['region']);
+      final org = _nonEmptyString(connMap?['org']);
+      final isp = _nonEmptyString(connMap?['isp']);
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: isp ?? org,
+        asn: _extractAsn(connMap?['asn']),
+        asName: org ?? isp,
+        asDomain: _nonEmptyString(connMap?['domain']),
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromMyIpJson(Map<String, dynamic> json) {
@@ -529,27 +825,137 @@ abstract class IpInfo with _$IpInfo {
       {'ip': final String ip, 'cc': final String countryCode} => IpInfo(
         ip: ip,
         countryCode: countryCode,
+        country: _nonEmptyString(json['country']),
       ),
       _ => throw const FormatException('invalid json'),
     };
   }
 
   static IpInfo fromIpAPIJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'query': final String ip, 'countryCode': final String countryCode} =>
-        IpInfo(ip: ip, countryCode: countryCode),
-      _ => throw const FormatException('invalid json'),
-    };
+    if (json['status'] != null && json['status'] != 'success') {
+      throw FormatException('ip-api failed: ${json['message']}');
+    }
+    if (json case {
+      'query': final String ip,
+      'countryCode': final String countryCode,
+    }) {
+      final countryName = _nonEmptyString(json['country']);
+      final province =
+          _nonEmptyString(json['regionName']) ?? _nonEmptyString(json['region']);
+      final (_, asLabel) = _splitOrgAsn(json['as']);
+      final org = _nonEmptyString(json['org']);
+      final isp = _nonEmptyString(json['isp']);
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: isp,
+        asn: _extractAsn(json['as'] ?? json['asn']),
+        asName: org ?? asLabel ?? isp,
+        asDomain: _nonEmptyString(json['asname']),
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromIdentMeJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'cc': final String countryCode} => IpInfo(
+    if (json case {'ip': final String ip, 'cc': final String countryCode}) {
+      final countryName = _nonEmptyString(json['country']);
+      final province = _nonEmptyString(json['region']);
+      return IpInfo(
         ip: ip,
-        countryCode: countryCode,
-      ),
-      _ => throw const FormatException('invalid json'),
-    };
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: _nonEmptyString(json['aso']),
+        asn: _extractAsn(json['asn']),
+        asName: _nonEmptyString(json['aso']),
+      );
+    }
+    throw const FormatException('invalid json');
+  }
+
+  static IpInfo fromGeoJsJson(Map<String, dynamic> json) {
+    if (json case {
+      'ip': final String ip,
+      'country_code': final String countryCode,
+    }) {
+      final countryName = _nonEmptyString(json['country']);
+      final province = _nonEmptyString(json['region']);
+      final org = _nonEmptyString(json['organization_name']) ??
+          _nonEmptyString(json['organization']);
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode, countryName, province),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode, province),
+        province: province,
+        city: _nonEmptyString(json['city']),
+        isp: org,
+        asn: _extractAsn(json['asn']),
+        asName: org,
+      );
+    }
+    throw const FormatException('invalid json');
+  }
+
+  static IpInfo fromCloudflareTrace(String traceText) {
+    String? ip;
+    String? countryCode;
+    for (final line in traceText.split('\n')) {
+      final parts = line.split('=');
+      if (parts.length != 2) continue;
+      final key = parts[0].trim();
+      final value = parts[1].trim();
+      if (key == 'ip') {
+        ip = value;
+      } else if (key == 'loc') {
+        countryCode = value;
+      }
+    }
+    if (ip != null && ip.isNotEmpty) {
+      return IpInfo(ip: ip, countryCode: countryCode ?? '');
+    }
+    throw const FormatException('invalid cloudflare trace');
+  }
+}
+
+extension IpInfoExt on IpInfo {
+  bool get hasDetails =>
+      (country?.isNotEmpty ?? false) ||
+      (city?.isNotEmpty ?? false) ||
+      (asn?.isNotEmpty ?? false) ||
+      (asName?.isNotEmpty ?? false) ||
+      (isp?.isNotEmpty ?? false);
+
+  IpInfo merge(IpInfo other) {
+    final mergedIp = ip.isNotEmpty ? ip : other.ip;
+    final sameIp = ip.isEmpty || other.ip.isEmpty || ip == other.ip;
+    final mergedCc = countryCode.isNotEmpty
+        ? countryCode
+        : (sameIp ? other.countryCode : '');
+    if (!sameIp) {
+      return this;
+    }
+    return copyWith(
+      ip: mergedIp,
+      countryCode: mergedCc,
+      country: (country?.isNotEmpty ?? false) ? country : other.country,
+      province: (province?.isNotEmpty ?? false) ? province : other.province,
+      city: (city?.isNotEmpty ?? false) ? city : other.city,
+      isp: (isp?.isNotEmpty ?? false) ? isp : other.isp,
+      asn: (asn?.isNotEmpty ?? false) ? asn : other.asn,
+      asName: (asName?.isNotEmpty ?? false) ? asName : other.asName,
+      asDomain: (asDomain?.isNotEmpty ?? false) ? asDomain : other.asDomain,
+    );
   }
 }
 

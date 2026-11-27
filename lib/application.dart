@@ -58,7 +58,6 @@ class Application extends ConsumerStatefulWidget {
 
 class ApplicationState extends ConsumerState<Application> {
   Timer? _autoUpdateProfilesTaskTimer;
-  bool _preHasVpn = false;
 
   final _pageTransitionsTheme = const PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{
@@ -134,11 +133,7 @@ class ApplicationState extends ConsumerState<Application> {
     commonPrint.log('connectivityChanged ${results.toString()}');
     unawaited(systemDnsCoordinator?.resync() ?? Future.value());
     unawaited(ref.read(systemActionProvider.notifier).updateLocalIp());
-    final hasVpn = results.contains(ConnectivityResult.vpn);
-    if (_preHasVpn == hasVpn) {
-      ref.read(checkIpNumProvider.notifier).add();
-    }
-    _preHasVpn = hasVpn;
+    ref.read(checkIpNumProvider.notifier).add();
   }
 
   @override

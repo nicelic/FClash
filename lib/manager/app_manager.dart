@@ -29,8 +29,19 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     ref.listenManual(checkIpProvider, (prev, next) {
-      if (prev != next && next.isInit && next.containsDetection) {
-        ref.read(networkDetectionProvider.notifier).startCheck();
+      if (!next.isInit || !next.containsDetection) {
+        return;
+      }
+      if (prev == null || prev.containsDetection != true) {
+        ref.read(networkDetectionProvider.notifier).startCheck(immediate: true);
+        return;
+      }
+      if (prev != next) {
+        final clearPrevious =
+            prev.isStart != next.isStart || prev.suspend != next.suspend;
+        ref
+            .read(networkDetectionProvider.notifier)
+            .startCheck(clearPrevious: clearPrevious);
       }
     });
     ref.listenManual(configProvider, (prev, next) {
@@ -81,7 +92,7 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
         if (!mounted) {
           return;
         }
-        ref.read(setupActionProvider.notifier).tryCheckIp();
+        ref.read(networkDetectionProvider.notifier).probeOnResume();
       });
     }
   }

@@ -160,13 +160,17 @@ class Window implements WindowPort {
   @override
   Future<void> toggle() => _visibility.toggle();
 
+  final ValueNotifier<bool> visibleNotifier = ValueNotifier<bool>(true);
+
   Future<void> _showWindow() async {
+    visibleNotifier.value = true;
     render?.resume();
     await windowManager.show();
     await windowManager.focus();
   }
 
   Future<void> _hideWindow() async {
+    visibleNotifier.value = false;
     render?.pause();
     await windowManager.hide();
   }

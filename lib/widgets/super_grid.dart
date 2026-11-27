@@ -20,6 +20,8 @@ class SuperGrid extends StatefulWidget {
   final double crossAxisSpacing;
   final int crossAxisCount;
   final VoidCallback? onUpdate;
+  final bool Function(int index)? canResize;
+  final ValueChanged<int>? onResize;
 
   const SuperGrid({
     super.key,
@@ -28,6 +30,8 @@ class SuperGrid extends StatefulWidget {
     this.mainAxisSpacing = 0,
     this.crossAxisSpacing = 0,
     this.onUpdate,
+    this.canResize,
+    this.onResize,
   });
 
   @override
@@ -107,6 +111,41 @@ class SuperGridState extends State<SuperGrid> with TickerProviderStateMixin {
       vsync: this,
       duration: _reorderDuration,
     );
+    _resetDragState();
+  }
+
+  @override
+  void didUpdateWidget(SuperGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_pendingChildren != null || _isDragging) {
+      return;
+    }
+    if (_gridItemsEqual(oldWidget.children, widget.children) ||
+        _gridItemsEqual(_childrenNotifier.value, widget.children)) {
+      return;
+    }
+    _syncExternalChildren(widget.children);
+  }
+
+  bool _gridItemsEqual(List<GridItem> a, List<GridItem> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _syncExternalChildren(List<GridItem> nextChildren) {
+    children = List<GridItem>.of(nextChildren);
+    _childrenNotifier.removeListener(_handleChildrenChanged);
+    _childrenNotifier.value = children;
+    _childrenNotifier.addListener(_handleChildrenChanged);
+    _tempIndexList = List.generate(length, (index) => index);
+    _syncItemKeys();
     _resetDragState();
   }
 
@@ -527,6 +566,15 @@ class SuperGridState extends State<SuperGrid> with TickerProviderStateMixin {
             onDelete: () {
               _handleDelete(index);
             },
+            canResize: widget.canResize?.call(index) ?? false,
+            onResize: widget.onResize != null
+                ? () {
+                    if (_pendingChildren != null || _isDragging) {
+                      return;
+                    }
+                    widget.onResize!(index);
+                  }
+                : null,
             child: child!,
           ),
           index,
@@ -664,8 +712,15 @@ class SuperGridState extends State<SuperGrid> with TickerProviderStateMixin {
 class _DeletableContainer extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;
+  final bool canResize;
+  final VoidCallback? onResize;
 
-  const _DeletableContainer({required this.child, required this.onDelete});
+  const _DeletableContainer({
+    required this.child,
+    required this.onDelete,
+    this.canResize = false,
+    this.onResize,
+  });
 
   @override
   State<_DeletableContainer> createState() => _DeletableContainerState();
@@ -695,11 +750,10 @@ class _DeletableContainerState extends State<_DeletableContainer>
   @override
   void didUpdateWidget(_DeletableContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.child != widget.child) {
-      setState(() {
-        _controller.value = 0;
-        _deleteButtonVisible = true;
-      });
+    if (oldWidget.child != widget.child ||
+        oldWidget.canResize != widget.canResize) {
+      _controller.value = 0;
+      _deleteButtonVisible = true;
     }
   }
 
@@ -719,6 +773,8 @@ class _DeletableContainerState extends State<_DeletableContainer>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = context.colorScheme;
+    final appLocalizations = context.appLocalizations;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -733,19 +789,45 @@ class _DeletableContainerState extends State<_DeletableContainer>
           child: widget.child,
         ),
         if (_deleteButtonVisible)
-          Positioned(
+          PositionedDirectional(
             top: -8,
-            right: -8,
+            start: -8,
             child: DeferPointer(
               child: SizedBox(
                 width: 24,
                 height: 24,
                 child: IconButton.filled(
-                  tooltip: context.appLocalizations.remove,
+                  tooltip: appLocalizations.remove,
                   iconSize: 20,
                   padding: const EdgeInsets.all(2),
+                  style: IconButton.styleFrom(
+                    backgroundColor: colorScheme.errorContainer,
+                    foregroundColor: colorScheme.onErrorContainer,
+                  ),
                   onPressed: _handleDel,
                   icon: const Icon(Icons.close),
+                ),
+              ),
+            ),
+          ),
+        if (_deleteButtonVisible && widget.canResize && widget.onResize != null)
+          PositionedDirectional(
+            top: -6,
+            end: -6,
+            child: DeferPointer(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: IconButton.filled(
+                  tooltip: appLocalizations.resize,
+                  iconSize: 15,
+                  padding: const EdgeInsets.all(2),
+                  style: IconButton.styleFrom(
+                    backgroundColor: colorScheme.primaryContainer,
+                    foregroundColor: colorScheme.onPrimaryContainer,
+                  ),
+                  onPressed: widget.onResize,
+                  icon: const Icon(Icons.open_in_full_rounded),
                 ),
               ),
             ),

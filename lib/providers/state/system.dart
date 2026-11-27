@@ -125,7 +125,16 @@ HotKeyAction getHotKeyAction(Ref ref, HotAction hotAction) {
 }
 
 @riverpod
-({bool isInit, int checkIpNum, bool containsDetection}) checkIp(Ref ref) {
+({
+  bool isInit,
+  int checkIpNum,
+  bool containsDetection,
+  bool isStart,
+  bool suspend,
+  String outboundKey,
+  String? localIp,
+})
+checkIp(Ref ref) {
   final isInit = ref.watch(initProvider);
   final checkIpNum = ref.watch(checkIpNumProvider);
   final containsDetection = ref.watch(
@@ -134,10 +143,40 @@ HotKeyAction getHotKeyAction(Ref ref, HotAction hotAction) {
           state.dashboardWidgets.contains(DashboardWidget.networkDetection),
     ),
   );
+  final isStart = ref.watch(isStartProvider);
+  final suspend = ref.watch(suspendProvider);
+  final clashRouting = ref.watch(
+    patchClashConfigProvider.select(
+      (state) => (mode: state.mode, mixedPort: state.mixedPort),
+    ),
+  );
+  final profileId = ref.watch(currentProfileIdProvider);
+  final selectedMap = ref.watch(
+    currentProfileProvider.select(
+      (state) => state?.selectedMap ?? const <String, String>{},
+    ),
+  );
+  final groupsNow = ref.watch(
+    groupsProvider.select(
+      (groups) => [for (final g in groups) '${g.name}:${g.realNow}'].join(';'),
+    ),
+  );
+  final outboundKey = switch (clashRouting.mode) {
+    Mode.direct => '${clashRouting.mode.name}|${clashRouting.mixedPort}',
+    Mode.global =>
+      '$profileId|${clashRouting.mode.name}|${clashRouting.mixedPort}|${selectedMap[GroupName.GLOBAL.name] ?? ''}|$groupsNow',
+    Mode.rule =>
+      '$profileId|${clashRouting.mode.name}|${clashRouting.mixedPort}|${groupsNow.isNotEmpty ? groupsNow : selectedMap.entries.map((e) => '${e.key}:${e.value}').join(';')}',
+  };
+  final localIp = ref.watch(localIpProvider);
   return (
     isInit: isInit,
     checkIpNum: checkIpNum,
     containsDetection: containsDetection,
+    isStart: isStart,
+    suspend: suspend,
+    outboundKey: outboundKey,
+    localIp: localIp,
   );
 }
 

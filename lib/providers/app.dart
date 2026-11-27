@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show Locale;
+import 'dart:ui' show Locale, PlatformDispatcher;
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/core.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:flutter/services.dart';
@@ -486,43 +487,203 @@ bool isUpdating(Ref ref, String name) {
 }
 
 @Riverpod(keepAlive: true)
+class WindowVisible extends _$WindowVisible with AutoDisposeNotifierMixin {
+  @override
+  bool build() {
+    return true;
+  }
+}
+
+@Riverpod(keepAlive: true)
 class NetworkDetection extends _$NetworkDetection
     with AutoDisposeNotifierMixin {
   static const _timeoutDisplayDelay = Duration(seconds: 2);
+  static const _resumeProbeCooldown = Duration(seconds: 45);
 
-  bool? _preIsStart;
   CancelToken? _cancelToken;
+  CancelToken? _probeToken;
+  CancelToken? _riskToken;
   Timer? _timeoutTimer;
   int _checkVersion = 0;
+  int _probeVersion = 0;
+  IpInfo? _rawIpInfo;
+  DateTime? _lastCheckedAt;
+  String? _riskIp;
+
+  IpInfo? get rawIpInfo => _rawIpInfo;
 
   @override
   NetworkDetectionState build() {
     ref.onDispose(() {
       _resetCheckSession(null);
+      _probeToken?.cancel();
+      _probeToken = null;
+      _riskToken?.cancel();
+      _riskToken = null;
+      debouncer.cancel(FunctionTag.checkIpRisk);
     });
     return const NetworkDetectionState(isLoading: true, ipInfo: null);
   }
 
-  void startCheck() {
-    debouncer.call(FunctionTag.checkIp, () {
-      _checkIp();
-    }, duration: commonDuration);
+  static String protectedCountryCode([Locale? locale]) {
+    final effective = locale ?? PlatformDispatcher.instance.locale;
+    return switch (effective.languageCode.toLowerCase()) {
+      'ja' => 'JP',
+      'ko' => 'KR',
+      'ru' => 'RU',
+      'fa' => 'IR',
+      _ => 'CN',
+    };
   }
 
-  Future<void> _checkIp() async {
+  IpInfo protectedIpInfo([Locale? locale]) {
+    final configuredLocale = getLocaleForString(
+      ref.read(appSettingProvider.select((state) => state.locale)),
+    );
+    return IpInfo(
+      ip: '10.0.0.108',
+      countryCode: protectedCountryCode(locale ?? configuredLocale),
+      country: 'Protected Mode',
+      asn: 'AS166188',
+    );
+  }
+
+  IpInfo? _displayIpInfo(IpInfo? info, {bool? masked}) {
+    if (info == null) {
+      return null;
+    }
+    return (masked ?? state.isIpMasked) ? protectedIpInfo() : info;
+  }
+
+  void toggleIpPrivacy() {
+    final nextMasked = !state.isIpMasked;
+    state = state.copyWith(
+      isIpMasked: nextMasked,
+      ipInfo: _displayIpInfo(_rawIpInfo, masked: nextMasked),
+    );
+  }
+
+  void manualRefresh() {
+    _rawIpInfo = null;
+    _lastCheckedAt = null;
+    _riskIp = null;
+    _riskToken?.cancel();
+    _probeToken?.cancel();
+    debouncer.cancel(FunctionTag.checkIpRisk);
+    state = state.copyWith(
+      isLoading: true,
+      isRefreshing: false,
+      ipInfo: null,
+      errorMessage: null,
+      riskyIp: null,
+      riskLevel: null,
+    );
+    startCheck(immediate: true, force: true, clearPrevious: true);
+  }
+
+  void refreshRiskCheck() {
+    _riskIp = null;
+    unawaited(_scheduleRiskCheck());
+  }
+
+  void startCheck({
+    bool immediate = false,
+    bool force = false,
+    bool clearPrevious = false,
+  }) {
+    debouncer.call(
+      FunctionTag.checkIp,
+      () => _checkIp(force: force, clearPrevious: clearPrevious),
+      duration: immediate ? Duration.zero : commonDuration,
+    );
+  }
+
+  Future<void> probeOnResume() async {
+    await _probeIfNeeded(isResume: true);
+  }
+
+  Future<void> probeForDrift() async {
+    await _probeIfNeeded(isResume: false);
+  }
+
+  Future<void> _probeIfNeeded({required bool isResume}) async {
+    if (!ref.read(initProvider)) {
+      return;
+    }
+    final containsDetection = ref.read(
+      dashboardStateProvider.select(
+        (state) =>
+            state.dashboardWidgets.contains(DashboardWidget.networkDetection),
+      ),
+    );
+    if (!containsDetection) {
+      return;
+    }
+    final current = _rawIpInfo;
+    if (current == null) {
+      if (!state.isLoading) {
+        startCheck(immediate: !isResume);
+      }
+      return;
+    }
+    if (isResume &&
+        _lastCheckedAt != null &&
+        DateTime.now().difference(_lastCheckedAt!) < _resumeProbeCooldown) {
+      return;
+    }
+    if (state.isLoading || state.isRefreshing) {
+      return;
+    }
+    final probeVersion = ++_probeVersion;
+    final token = CancelToken();
+    _probeToken?.cancel();
+    _probeToken = token;
+    final res = await request.probePublicIp(cancelToken: token);
+    if (!ref.mounted ||
+        probeVersion != _probeVersion ||
+        !identical(token, _probeToken)) {
+      return;
+    }
+    final probedIp = res.data?.ip;
+    if (res.isError || probedIp == null || probedIp.isEmpty) {
+      return;
+    }
+    _lastCheckedAt = DateTime.now();
+    if (probedIp == current.ip) {
+      return;
+    }
+    await _checkIp(force: false, clearPrevious: false);
+  }
+
+  Future<void> _checkIp({
+    bool force = false,
+    bool clearPrevious = false,
+  }) async {
     final isInit = ref.read(initProvider);
     if (!isInit) {
       return;
     }
-    final isStart = ref.read(isStartProvider);
-    if (!isStart && _preIsStart == false && state.ipInfo != null) {
-      return;
-    }
+    _probeVersion++;
+    _probeToken?.cancel();
+    _probeToken = null;
     final cancelToken = CancelToken();
     final version = _resetCheckSession(cancelToken);
     commonPrint.log('checkIp start');
-    state = state.copyWith(isLoading: true, ipInfo: null);
-    _preIsStart = isStart;
+    final shouldClear = force || clearPrevious || _rawIpInfo == null;
+    if (shouldClear) {
+      _rawIpInfo = null;
+      state = state.copyWith(
+        isLoading: true,
+        isRefreshing: false,
+        ipInfo: null,
+        errorMessage: null,
+        riskyIp: null,
+        riskLevel: null,
+      );
+    } else {
+      state = state.copyWith(isRefreshing: true, errorMessage: null);
+    }
+
     final res = await request.checkIp(cancelToken: cancelToken);
     commonPrint.log('checkIp res: $res');
 
@@ -531,12 +692,106 @@ class NetworkDetection extends _$NetworkDetection
         cancelToken != _cancelToken) {
       return;
     }
-    final ipInfo = res.data;
-    if (ipInfo == null) {
-      _delayTimeoutDisplay(version);
+    if (res.isError) {
+      if (res.message == 'cancelled') {
+        return;
+      }
+      if (_rawIpInfo == null) {
+        _delayTimeoutDisplay(version);
+      } else {
+        state = state.copyWith(isLoading: false, isRefreshing: false);
+      }
       return;
     }
-    state = state.copyWith(isLoading: false, ipInfo: ipInfo);
+    final ipInfo = res.data;
+    if (ipInfo == null) {
+      if (_rawIpInfo == null) {
+        _delayTimeoutDisplay(version);
+      } else {
+        state = state.copyWith(isLoading: false, isRefreshing: false);
+      }
+      return;
+    }
+    _rawIpInfo = ipInfo;
+    _lastCheckedAt = DateTime.now();
+    state = state.copyWith(
+      isLoading: false,
+      isRefreshing: false,
+      ipInfo: _displayIpInfo(ipInfo),
+      errorMessage: null,
+    );
+    unawaited(_scheduleRiskCheck());
+  }
+
+  Future<void> _scheduleRiskCheck() async {
+    final ip = _rawIpInfo?.ip;
+    final alertEnabled = ref.read(
+      appSettingProvider.select((state) => state.ipRiskAlert),
+    );
+    final containsDetection = ref.read(
+      dashboardStateProvider.select(
+        (state) =>
+            state.dashboardWidgets.contains(DashboardWidget.networkDetection),
+      ),
+    );
+    if (!alertEnabled ||
+        !containsDetection ||
+        ip == null ||
+        classifyIp(ip) != IpCategory.public) {
+      _riskIp = null;
+      _riskToken?.cancel();
+      debouncer.cancel(FunctionTag.checkIpRisk);
+      if (state.riskyIp != null || state.riskLevel != null) {
+        state = state.copyWith(riskyIp: null, riskLevel: null);
+      }
+      return;
+    }
+    if (ip == _riskIp && state.riskLevel != null) {
+      return;
+    }
+    _riskIp = ip;
+    _riskToken?.cancel();
+    debouncer.cancel(FunctionTag.checkIpRisk);
+    final cached = await ipIntelCache.readRisk(ip);
+    if (!ref.mounted || ip != _riskIp) {
+      return;
+    }
+    if (cached != null) {
+      _applyRisk(ip, cached);
+      return;
+    }
+    debouncer.call(
+      FunctionTag.checkIpRisk,
+      () => _checkRisk(ip),
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  Future<void> _checkRisk(String ip) async {
+    if (!ref.mounted ||
+        ip != _riskIp ||
+        !ref.read(appSettingProvider.select((state) => state.ipRiskAlert))) {
+      return;
+    }
+    final token = CancelToken();
+    _riskToken = token;
+    final res = await request.queryIpRisk(
+      ip,
+      cancelToken: token,
+      timeout: const Duration(seconds: 5),
+    );
+    if (!ref.mounted || ip != _riskIp || !identical(token, _riskToken)) {
+      return;
+    }
+    _applyRisk(ip, res.data);
+  }
+
+  void _applyRisk(String ip, IpRisk? risk) {
+    final level = risk?.level;
+    state = state.copyWith(
+      riskyIp: level != null && level != IpRiskLevel.low ? ip : null,
+      riskLevel: level,
+    );
   }
 
   int _resetCheckSession(CancelToken? cancelToken) {
@@ -552,10 +807,15 @@ class NetworkDetection extends _$NetworkDetection
     _cancelTimeoutTimer();
     _timeoutTimer = Timer(_timeoutDisplayDelay, () {
       _timeoutTimer = null;
-      if (!ref.mounted || version != _checkVersion || state.ipInfo != null) {
+      if (!ref.mounted || version != _checkVersion || _rawIpInfo != null) {
         return;
       }
-      state = state.copyWith(isLoading: false, ipInfo: null);
+      state = state.copyWith(
+        isLoading: false,
+        isRefreshing: false,
+        ipInfo: null,
+        errorMessage: currentAppLocalizations.timeout,
+      );
     });
   }
 
