@@ -146,7 +146,7 @@ jobs:
         id: ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
-          local-cache: true
+          local-cache: false
 
       - name: Validate the Android core library
         working-directory: core
@@ -183,7 +183,7 @@ jobs:
         id: ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
-          local-cache: true
+          local-cache: false
 
       - name: Setup Java
         uses: actions/setup-java@v4

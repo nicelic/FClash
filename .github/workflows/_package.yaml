@@ -169,7 +169,7 @@ jobs:
         id: build-ndk
         with:
           ndk-version: ${{ inputs.ndk_version }}
-          local-cache: true
+          local-cache: false
           add-to-path: true
           link-to-sdk: true
 
