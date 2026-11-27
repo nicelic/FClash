@@ -36,7 +36,7 @@ String syncPubspecVersion(
   DateTime? now,
 }) {
   final linePattern = RegExp(
-    r'^version:\s*(\d+\.\d+\.\d+)(?:\+(\d+))?\s*$',
+    r'^version:[ \t]*(\d+\.\d+\.\d+)(?:\+(\d+))?[ \t]*(?=\r?$)',
     multiLine: true,
   );
   final match = linePattern.firstMatch(pubspecContent);
