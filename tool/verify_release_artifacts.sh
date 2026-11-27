@@ -91,13 +91,11 @@ verify_android() {
     exit 1
   fi
 
-  if [ -f android/app/keystore.jks ]; then
-    if ! printf '%s\n' "$badging" | grep -q "package: name='com.follow.clash'"; then
-      echo "Signed APK must use package com.follow.clash" >&2
-      exit 1
-    fi
-    "$bt_dir/apksigner" verify --verbose "$apk"
+  if ! printf '%s\n' "$badging" | grep -q "package: name='com.nicelic.fclash'"; then
+    echo "Release APK must use package com.nicelic.fclash" >&2
+    exit 1
   fi
+  "$bt_dir/apksigner" verify --verbose "$apk"
 
   (cd "$dist_dir" && sha256sum "$(basename "$apk")") > "$checksum_file"
 }
@@ -126,7 +124,7 @@ verify_linux() {
 
   dpkg-deb --info "$deb" >/dev/null
   deb_contents="$(dpkg-deb --contents "$deb")"
-  for needle in "FlClash" "FlClashCore" "FlClashHelperService" "manifest.json" "librust_api.so"; do
+  for needle in "FClash" "FClashCore" "FClashHelperService" "manifest.json" "librust_api.so"; do
     if ! printf '%s\n' "$deb_contents" | grep -q "$needle"; then
       echo ".deb missing $needle: $deb" >&2
       exit 1
@@ -134,17 +132,17 @@ verify_linux() {
   done
 
   dpkg-deb -x "$deb" "$tmpdir/deb"
-  verify_manifest_matches_core "$tmpdir/deb" "FlClashCore"
-  helper_file="$(find "$tmpdir/deb" -name FlClashHelperService -type f | head -n 1)"
+  verify_manifest_matches_core "$tmpdir/deb" "FClashCore"
+  helper_file="$(find "$tmpdir/deb" -name FClashHelperService -type f | head -n 1)"
   helper_perm="$(stat -c '%a' "$helper_file")"
   if printf '%s\n' "$helper_perm" | grep -qE '([2367][0-7]|[2367])$'; then
-    echo "FlClashHelperService in .deb must not be group/world writable (mode $helper_perm)" >&2
+    echo "FClashHelperService in .deb must not be group/world writable (mode $helper_perm)" >&2
     exit 1
   fi
 
   rpm -qpi "$rpm_pkg" >/dev/null
   rpm_contents="$(rpm -qpl "$rpm_pkg")"
-  for needle in "FlClash" "FlClashCore" "FlClashHelperService" "manifest.json" "librust_api.so"; do
+  for needle in "FClash" "FClashCore" "FClashHelperService" "manifest.json" "librust_api.so"; do
     if ! printf '%s\n' "$rpm_contents" | grep -q "$needle"; then
       echo ".rpm missing $needle: $rpm_pkg" >&2
       exit 1
@@ -154,7 +152,7 @@ verify_linux() {
   cp "$appimage" "$tmpdir/test.AppImage"
   chmod +x "$tmpdir/test.AppImage"
   (cd "$tmpdir" && ./test.AppImage --appimage-extract >/dev/null)
-  verify_manifest_matches_core "$tmpdir/squashfs-root" "FlClashCore"
+  verify_manifest_matches_core "$tmpdir/squashfs-root" "FClashCore"
   if [ -z "$(find "$tmpdir/squashfs-root" -name 'librust_api.so' -type f)" ]; then
     echo ".AppImage missing librust_api.so: $appimage" >&2
     exit 1
@@ -200,8 +198,8 @@ verify_macos() {
     exit 1
   fi
 
-  main_bin="$app/Contents/MacOS/FlClash"
-  core_bin="$(find "$app" -name 'FlClashCore' -type f | head -n 1)"
+  main_bin="$app/Contents/MacOS/FClash"
+  core_bin="$(find "$app" -name 'FClashCore' -type f | head -n 1)"
   rust_lib="$(find "$app" -iname '*rust_api*' -type f | head -n 1)"
   if [ ! -x "$main_bin" ] || [ -z "$core_bin" ] || [ -z "$rust_lib" ]; then
     echo "macOS bundle missing required binaries (main=$main_bin core=$core_bin rust=$rust_lib)" >&2

@@ -52,9 +52,9 @@ try {
   Expand-Archive -Path $zip.FullName -DestinationPath $tmp -Force
 
   $required = @(
-    'FlClash.exe',
-    'FlClashCore.exe',
-    'FlClashHelperService.exe',
+    'FClash.exe',
+    'FClashCore.exe',
+    'FClashHelperService.exe',
     'EnableLoopback.exe',
     'manifest.json',
     'rust_api.dll'
@@ -66,7 +66,7 @@ try {
     }
   }
 
-  foreach ($peName in @('FlClash.exe', 'FlClashCore.exe', 'FlClashHelperService.exe', 'rust_api.dll')) {
+  foreach ($peName in @('FClash.exe', 'FClashCore.exe', 'FClashHelperService.exe', 'rust_api.dll')) {
     $bin = Get-ChildItem -Path $tmp -Recurse -File -Filter $peName | Select-Object -First 1
     $machine = Get-PeMachine $bin.FullName
     if ($machine -ne $expectedMachine) {
@@ -74,7 +74,7 @@ try {
     }
   }
 
-  $coreBin = Get-ChildItem -Path $tmp -Recurse -File -Filter 'FlClashCore.exe' | Select-Object -First 1
+  $coreBin = Get-ChildItem -Path $tmp -Recurse -File -Filter 'FClashCore.exe' | Select-Object -First 1
   $manifestFile = Get-ChildItem -Path $tmp -Recurse -File -Filter 'manifest.json' | Select-Object -First 1
   $manifest = Get-Content -Path $manifestFile.FullName -Raw | ConvertFrom-Json
   $actualHash = (Get-FileHash -Path $coreBin.FullName -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -135,7 +135,7 @@ void main() {
     });
 
     test('passes a path containing spaces through untouched', () {
-      const path = '/Users/a b/FlClash.app/Contents/MacOS/FlClashCore';
+      const path = '/Users/a b/FClash.app/Contents/MacOS/FClashCore';
       for (final isMacOS in [true, false]) {
         final arguments = System.statArguments(path, isMacOS: isMacOS);
         expect(arguments.last, path);
@@ -175,7 +175,7 @@ void main() {
     });
 
     test('passes a path containing spaces through untouched', () {
-      const path = '/Users/a b/Library/Application Support/com.follow.clash';
+      const path = '/Users/a b/Library/Application Support/com.nicelic.fclash';
 
       final arguments = System.aclArguments(path, 'alice');
 

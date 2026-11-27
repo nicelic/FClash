@@ -87,8 +87,8 @@ void main() {
     // AboutView reads globalState.packageInfo, which only the real app bootstrap
     // populates.
     globalState.packageInfo = PackageInfo(
-      appName: 'FlClash',
-      packageName: 'com.follow.clash',
+      appName: 'FClash',
+      packageName: 'com.nicelic.fclash',
       version: '0.0.0',
       buildNumber: '1',
     );

@@ -35,8 +35,12 @@ void main() {
     await listen();
 
     await emit('flclash://install-config?url=https://example.com/a.yaml');
+    await emit('fclash://install-config?url=https://example.com/b.yaml');
 
-    expect(received, ['https://example.com/a.yaml']);
+    expect(received, [
+      'https://example.com/a.yaml',
+      'https://example.com/b.yaml',
+    ]);
   });
 
   test('an install-config link without a url is ignored', () async {

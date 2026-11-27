@@ -33,7 +33,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.follow.clash"
+        applicationId = "com.nicelic.fclash"
         minSdk = flutter.minSdkVersion
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = flutter.versionCode
@@ -41,6 +41,16 @@ android {
     }
 
     signingConfigs {
+        val fallbackDebugStoreFile = file("debug.keystore")
+        if (fallbackDebugStoreFile.exists()) {
+            getByName("debug") {
+                storeFile = fallbackDebugStoreFile
+                storeType = "PKCS12"
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = releaseStoreFile
@@ -63,14 +73,24 @@ android {
             applicationIdSuffix = ".dev"
         }
 
+        create("dev") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".dev"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
+                logger.warn(
+                    "Release keystore not configured; signing release build with fallback debug.keystore " +
+                        "while preserving applicationId=com.nicelic.fclash.",
+                )
                 signingConfig = signingConfigs.getByName("debug")
-                applicationIdSuffix = ".dev"
             }
 
             proguardFiles(

@@ -66,8 +66,8 @@ Future<void> tapCancel(WidgetTester tester) async {
 void main() {
   setUpAll(() {
     globalState.packageInfo = PackageInfo(
-      appName: 'FlClash',
-      packageName: 'com.follow.clash',
+      appName: 'FClash',
+      packageName: 'com.nicelic.fclash',
       version: _runningVersion,
       buildNumber: '1',
     );

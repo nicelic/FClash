@@ -62,6 +62,9 @@ jobs:
               echo "storePassword=$STORE_PASSWORD"
               echo "keyPassword=$KEY_PASSWORD"
             } >> android/local.properties
+          else
+            echo "::warning::Android KEYSTORE secrets are not set; using shared fallback debug.keystore so consecutive releases can still upgrade in-place."
+            bash tool/ensure_debug_keystore.sh
           fi
 
       - name: Setup Go
