@@ -6,6 +6,12 @@ on:
       - '**'
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      auto_commit:
+        description: 'Commit formatted and generated Dart/l10n files back to branch'
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +27,8 @@ jobs:
   dart:
     name: Dart
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,7 +68,43 @@ jobs:
       - name: Run tests
         run: flutter test --reporter expanded
 
+      - name: Restore pubspec.yaml
+        if: always()
+        run: git checkout -- pubspec.yaml
+
+      - name: Commit formatted and generated Dart files
+        if: >-
+          github.ref_type == 'branch' &&
+          github.actor != 'github-actions[bot]' &&
+          (github.event_name == 'push' ||
+            (github.event_name == 'workflow_dispatch' && inputs.auto_commit != false))
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- lib test tool plugins setup.dart)" ]; then
+            echo 'No Dart formatting or code generation changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- lib test tool plugins setup.dart
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit \
+            -m 'style(ci): sync formatted Dart and generated files [skip ci]' \
+            -m 'Changelog: skip'
+          remote_sha="$(git ls-remote origin "refs/heads/${TARGET_BRANCH}" | awk '{print $1}')"
+          if [ -n "$remote_sha" ] && [ "$remote_sha" != "$EXPECTED_SHA" ]; then
+            echo "::notice::Branch ${TARGET_BRANCH} advanced to ${remote_sha} while checks ran; skipping stale sync commit."
+            exit 0
+          fi
+          git push origin "HEAD:${TARGET_BRANCH}"
+
       - name: Warn if committed generated files are out of date
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.auto_commit == false)
         run: |
           if [ -n "$(git status --porcelain -- lib/l10n lib/models/generated lib/providers/generated lib/database/generated)" ]; then
             echo '::warning::Committed generated Dart or l10n files are out of date. Reusing freshly generated files for release builds.'
