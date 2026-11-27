@@ -1,7 +1,6 @@
 import 'dart:io';
 
-import 'package:fl_clash/common/constant.dart';
-import 'package:fl_clash/common/network.dart';
+import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/providers/app.dart';
@@ -375,13 +374,13 @@ class _FakeNic implements NetworkInterface {
   final String name;
 
   @override
-  final List<InternetAddress> addresses;
+  final List<InterfaceAddress> addresses;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _FakeNicAddress implements InternetAddress {
+class _FakeNicAddress implements InterfaceAddress {
   _FakeNicAddress(this.address);
 
   @override
