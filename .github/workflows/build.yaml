@@ -324,7 +324,8 @@ jobs:
       platform: windows
       os: windows-11-arm
       arch: arm64
-      flutter_channel: stable
+      # Stable publishes no Windows/Linux arm64 archive; master clones the pinned tag.
+      flutter_channel: master
       flutter_version: '3.47.9'
       go_version: '1.26.4'
       ndk_version: r28c
@@ -356,7 +357,7 @@ jobs:
       platform: linux
       os: ubuntu-24.04-arm
       arch: arm64
-      flutter_channel: stable
+      flutter_channel: master
       flutter_version: '3.47.9'
       go_version: '1.26.4'
       ndk_version: r28c
@@ -437,6 +438,7 @@ jobs:
           prerelease: true
 
   publish-android-arm64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-android-arm64.result == 'success' }}
     needs: [ prepare-release, build-android-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -446,6 +448,7 @@ jobs:
     secrets: inherit
 
   publish-android-arm:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-android-arm.result == 'success' }}
     needs: [ prepare-release, build-android-arm ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -455,6 +458,7 @@ jobs:
     secrets: inherit
 
   publish-android-amd64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-android-amd64.result == 'success' }}
     needs: [ prepare-release, build-android-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -464,6 +468,7 @@ jobs:
     secrets: inherit
 
   publish-windows-amd64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-windows-amd64.result == 'success' }}
     needs: [ prepare-release, build-windows-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -473,6 +478,7 @@ jobs:
     secrets: inherit
 
   publish-windows-arm64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-windows-arm64.result == 'success' }}
     needs: [ prepare-release, build-windows-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -482,6 +488,7 @@ jobs:
     secrets: inherit
 
   publish-linux-amd64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-linux-amd64.result == 'success' }}
     needs: [ prepare-release, build-linux-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -491,6 +498,7 @@ jobs:
     secrets: inherit
 
   publish-linux-arm64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-linux-arm64.result == 'success' }}
     needs: [ prepare-release, build-linux-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -500,6 +508,7 @@ jobs:
     secrets: inherit
 
   publish-macos-arm64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-macos-arm64.result == 'success' }}
     needs: [ prepare-release, build-macos-arm64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -509,6 +518,7 @@ jobs:
     secrets: inherit
 
   publish-macos-amd64:
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.prepare-release.result == 'success' && needs.build-macos-amd64.result == 'success' }}
     needs: [ prepare-release, build-macos-amd64 ]
     uses: ./.github/workflows/_publish.yaml
     permissions:
@@ -546,15 +556,46 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ALL_PUBLISHED: ${{ needs.publish-android-arm64.result == 'success' && needs.publish-android-arm.result == 'success' && needs.publish-android-amd64.result == 'success' && needs.publish-windows-amd64.result == 'success' && needs.publish-windows-arm64.result == 'success' && needs.publish-linux-amd64.result == 'success' && needs.publish-linux-arm64.result == 'success' && needs.publish-macos-arm64.result == 'success' && needs.publish-macos-amd64.result == 'success' }}
+          PUBLISHED_CHECKSUMS: >-
+            ${{ needs.publish-android-arm64.result == 'success' && './checksums/SHA256SUMS.android-arm64' || '' }}
+            ${{ needs.publish-android-arm.result == 'success' && './checksums/SHA256SUMS.android-arm' || '' }}
+            ${{ needs.publish-android-amd64.result == 'success' && './checksums/SHA256SUMS.android-amd64' || '' }}
+            ${{ needs.publish-windows-amd64.result == 'success' && './checksums/SHA256SUMS.windows-amd64' || '' }}
+            ${{ needs.publish-windows-arm64.result == 'success' && './checksums/SHA256SUMS.windows-arm64' || '' }}
+            ${{ needs.publish-linux-amd64.result == 'success' && './checksums/SHA256SUMS.linux-amd64' || '' }}
+            ${{ needs.publish-linux-arm64.result == 'success' && './checksums/SHA256SUMS.linux-arm64' || '' }}
+            ${{ needs.publish-macos-arm64.result == 'success' && './checksums/SHA256SUMS.macos-arm64' || '' }}
+            ${{ needs.publish-macos-amd64.result == 'success' && './checksums/SHA256SUMS.macos-amd64' || '' }}
         run: |
-          if compgen -G './checksums/SHA256SUMS.*' > /dev/null; then
-            LC_ALL=C sort -k2 ./checksums/SHA256SUMS.* > SHA256SUMS
-            gh release upload "${{ github.ref_name }}" ./SHA256SUMS \
-              --repo "${{ github.repository }}" \
-              --clobber
+          checksum_files=()
+          for f in $PUBLISHED_CHECKSUMS; do
+            [ -f "$f" ] && checksum_files+=("$f")
+          done
+          if [ "${#checksum_files[@]}" -gt 0 ]; then
+            LC_ALL=C sort -k2 "${checksum_files[@]}" > SHA256SUMS
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "${{ github.ref_name }}" ./SHA256SUMS \
+                --repo "${{ github.repository }}" \
+                --clobber; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                exit 1
+              fi
+              sleep $((attempt * 3))
+            done
           fi
           if [ "${{ env.IS_STABLE }}" = "true" ] && [ "$ALL_PUBLISHED" = "true" ]; then
-            gh release edit "${{ github.ref_name }}" \
-              --repo "${{ github.repository }}" \
-              --prerelease=false
+            for attempt in 1 2 3 4 5; do
+              if gh release edit "${{ github.ref_name }}" \
+                --repo "${{ github.repository }}" \
+                --prerelease=false \
+                --latest; then
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                exit 1
+              fi
+              sleep $((attempt * 3))
+            done
           fi

@@ -24,6 +24,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" ./dist/* \
-            --repo "${{ github.repository }}" \
-            --clobber
+          shopt -s nullglob
+          files=(./dist/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No package files found in ./dist for ${{ inputs.artifact_name }}" >&2
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            if gh release upload "${{ github.ref_name }}" "${files[@]}" \
+              --repo "${{ github.repository }}" \
+              --clobber; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 3))
+          done
