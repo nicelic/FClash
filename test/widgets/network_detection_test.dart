@@ -214,14 +214,19 @@ void main() {
   });
 
   Future<void> pumpUntil(WidgetTester tester, Finder finder) async {
-    await tester.runAsync(() async {
-      final deadline = DateTime.now().add(const Duration(seconds: 5));
-      while (finder.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+    await tester.pump();
+    for (var i = 0; i < 250; i++) {
+      if (finder.evaluate().isNotEmpty) {
         await tester.pump();
-        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump(const Duration(milliseconds: 350));
+        return;
       }
-    });
-    await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    fail('timed out waiting for $finder');
   }
 
   testWidgets(
@@ -260,7 +265,7 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.text('open'));
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('Datawave Global LLC'), findsOneWidget);
@@ -280,6 +285,8 @@ void main() {
       expect(find.text('Google LLC · AS15169'), findsOneWidget);
       expect(find.text('12'), findsOneWidget);
       expect(tester.takeException(), null);
+
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 }
