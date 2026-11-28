@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fl_clash/enum/enum.dart';
 import 'package:flutter/foundation.dart';
 
 typedef NetworkInterfaceLister =

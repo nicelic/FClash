@@ -9,7 +9,8 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
-import 'package:fl_clash/views/dashboard/widgets/network_detection.dart';
+import 'package:fl_clash/views/dashboard/widgets/network_detection.dart'
+    as network_detection;
 import 'package:fl_clash/widgets/inherited.dart';
 import 'package:fl_clash/widgets/ip_detail_dialog.dart';
 import 'package:fl_clash/widgets/ip_risk.dart';
@@ -139,7 +140,7 @@ void main() {
                         size == DashboardTileSize.large
                     ? 360
                     : 180,
-                child: NetworkDetection(size: size),
+                child: network_detection.NetworkDetection(size: size),
               ),
             ),
           ),
@@ -182,7 +183,7 @@ void main() {
             valueListenable: isActive,
             builder: (_, active, _) => PageActivityScope(
               isActive: active,
-              child: const Scaffold(body: NetworkDetection()),
+              child: const Scaffold(body: network_detection.NetworkDetection()),
             ),
           ),
         ),

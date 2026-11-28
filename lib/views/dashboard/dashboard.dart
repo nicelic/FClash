@@ -298,7 +298,6 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                                 crossAxisCount: columns,
                                 crossAxisSpacing: spacing,
                                 mainAxisSpacing: spacing,
-                                children: children,
                                 canResize: (index) {
                                   final list =
                                       key.currentState?.snapshotChildren ??
@@ -314,6 +313,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
                                 onUpdate: () {
                                   _handleSave();
                                 },
+                                children: children,
                               ),
                             )
                           : Grid(

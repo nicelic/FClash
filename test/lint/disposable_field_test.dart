@@ -20,6 +20,9 @@ const _allowed = {
   // `CoreEventManager` is a private-constructor singleton that fans core events
   // out for the whole run; closing its controller would end event delivery.
   'lib/core/event.dart#_controller',
+  // `window` is a process-wide singleton whose visibility notifier is listened
+  // to across the full desktop session.
+  'lib/common/window.dart#visibleNotifier',
 };
 
 final _declaration = RegExp(

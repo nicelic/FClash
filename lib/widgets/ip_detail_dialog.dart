@@ -14,7 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 String _stripIpPort(String rawIp) {
-  var cleanIp = rawIp.trim();
+  final cleanIp = rawIp.trim();
   if (cleanIp.startsWith('[') && cleanIp.contains(']')) {
     return cleanIp.substring(1, cleanIp.indexOf(']'));
   }
