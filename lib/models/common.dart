@@ -538,10 +538,14 @@ abstract class IpRisk with _$IpRisk {
 }
 
 extension IpRiskExt on IpRisk {
-  bool get isHomeBroadband =>
-      checks.isNotEmpty &&
-      checks.any((check) => check.group == IpRiskGroup.datacenter) &&
-      checks.every((check) => check.hit != true);
+  bool get isHomeBroadband {
+    final datacenter = checks.where(
+      (check) => check.group == IpRiskGroup.datacenter,
+    );
+    return datacenter.isNotEmpty &&
+        datacenter.every((check) => check.hit == false) &&
+        checks.every((check) => check.hit != true);
+  }
 
   int get displayScore => !isHomeBroadband && score == 0 ? 1 : score;
 
@@ -821,14 +825,17 @@ abstract class IpInfo with _$IpInfo {
   }
 
   static IpInfo fromMyIpJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {'ip': final String ip, 'cc': final String countryCode} => IpInfo(
+    if (json case {'ip': final String ip, 'cc': final String countryCode}) {
+      final countryName = _nonEmptyString(json['country']);
+      return IpInfo(
         ip: ip,
-        countryCode: countryCode,
-        country: _nonEmptyString(json['country']),
-      ),
-      _ => throw const FormatException('invalid json'),
-    };
+        countryCode: normalizeCountryCode(countryCode, countryName),
+        country: countryName == null
+            ? null
+            : normalizeCountry(countryName, countryCode),
+      );
+    }
+    throw const FormatException('invalid json');
   }
 
   static IpInfo fromIpAPIJson(Map<String, dynamic> json) {
@@ -922,7 +929,10 @@ abstract class IpInfo with _$IpInfo {
       }
     }
     if (ip != null && ip.isNotEmpty) {
-      return IpInfo(ip: ip, countryCode: countryCode ?? '');
+      return IpInfo(
+        ip: ip,
+        countryCode: normalizeCountryCode(countryCode ?? ''),
+      );
     }
     throw const FormatException('invalid cloudflare trace');
   }

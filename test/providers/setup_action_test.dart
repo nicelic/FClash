@@ -603,6 +603,12 @@ void main() {
       PathProviderPlatform.instance = _FakePathProvider(tempDir.path);
       await AppLocalizations.load(const Locale('en'));
       originalLastConfigMd5 = globalState.lastConfigMd5;
+      globalState.packageInfo = PackageInfo(
+        appName: 'FClash',
+        packageName: 'com.nicelic.fclash',
+        version: '0.0.0',
+        buildNumber: '0',
+      );
     });
 
     tearDownAll(() {
@@ -674,12 +680,6 @@ void main() {
           ).readAsString();
           return '';
         });
-        globalState.packageInfo = PackageInfo(
-          appName: 'FClash',
-          packageName: 'com.nicelic.fclash',
-          version: '0.0.0',
-          buildNumber: '0',
-        );
         final scoped = ProviderContainer(
           overrides: [
             profilesProvider.overrideWith(() => TestProfiles([profile])),
@@ -826,6 +826,7 @@ void main() {
         final profile = Profile.normal(label: 'p');
         final core = _MockCoreHandlerInterface();
         when(() => core.getConfig(any())).thenAnswer((_) async => {});
+        when(() => core.getExternalProviders()).thenAnswer((_) async => []);
         String? writtenYaml;
         when(() => core.setupConfig(any())).thenAnswer((_) async {
           writtenYaml = await File(
@@ -833,12 +834,6 @@ void main() {
           ).readAsString();
           return '';
         });
-        globalState.packageInfo = PackageInfo(
-          appName: 'FClash',
-          packageName: 'com.nicelic.fclash',
-          version: '0.0.0',
-          buildNumber: '0',
-        );
         final scoped = ProviderContainer(
           overrides: [
             profilesProvider.overrideWith(() => TestProfiles([profile])),
@@ -852,6 +847,7 @@ void main() {
           ],
         );
         addTearDown(scoped.dispose);
+        scoped.listen(patchClashConfigProvider, (_, _) {});
         scoped
             .read(patchClashConfigProvider.notifier)
             .update((state) => state.copyWith.tun(enable: true));
@@ -950,16 +946,11 @@ void main() {
           ).readAsString();
           return '';
         });
+        when(() => core.getExternalProviders()).thenAnswer((_) async => []);
         when(() => core.startListener()).thenAnswer((_) async {
           calls.add('startListener');
           return true;
         });
-        globalState.packageInfo = PackageInfo(
-          appName: 'FClash',
-          packageName: 'com.nicelic.fclash',
-          version: '0.0.0',
-          buildNumber: '0',
-        );
         final scoped = ProviderContainer(
           overrides: [
             initProvider.overrideWithBuild((_, _) => true),
@@ -978,6 +969,7 @@ void main() {
           ],
         );
         addTearDown(scoped.dispose);
+        scoped.listen(patchClashConfigProvider, (_, _) {});
         scoped
             .read(patchClashConfigProvider.notifier)
             .update((state) => state.copyWith.tun(enable: true));

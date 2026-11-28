@@ -213,61 +213,73 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('IpDetailDialog toggles to Scamalytics view and queries custom IP', (
-    tester,
-  ) async {
-    final originalAdapter = request.dio.httpClientAdapter;
-    request.dio.httpClientAdapter = _DialogAdapter();
-    addTearDown(() => request.dio.httpClientAdapter = originalAdapter);
+  Future<void> pumpUntil(WidgetTester tester, Finder finder) async {
+    await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (finder.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pump(const Duration(milliseconds: 350));
+  }
 
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  testWidgets(
+    'IpDetailDialog toggles to Scamalytics view and queries custom IP',
+    (tester) async {
+      final originalAdapter = request.dio.httpClientAdapter;
+      request.dio.httpClientAdapter = _DialogAdapter();
+      addTearDown(() => request.dio.httpClientAdapter = originalAdapter);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: TestApp(
-          child: Builder(
-            builder: (context) => Scaffold(
-              body: ElevatedButton(
-                onPressed: () {
-                  unawaited(
-                    showIpDetailDialog(
-                      context,
-                      sampleIp.ip,
-                      preloaded: sampleIp,
-                    ),
-                  );
-                },
-                child: const Text('open'),
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: TestApp(
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () {
+                    unawaited(
+                      showIpDetailDialog(
+                        context,
+                        sampleIp.ip,
+                        preloaded: sampleIp,
+                      ),
+                    );
+                  },
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    await tester.tap(find.text('open'));
-    await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('open'));
+      await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.text('Datawave Global LLC'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Datawave Global LLC'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.swap_horiz_rounded));
-    await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.byIcon(Icons.swap_horiz_rounded));
+      await pumpUntil(tester, find.byType(IpRiskScore));
 
-    expect(find.byType(IpRiskScore), findsOneWidget);
-    expect(find.text('65'), findsOneWidget);
+      expect(find.byType(IpRiskScore), findsOneWidget);
+      expect(find.text('65'), findsOneWidget);
 
-    await tester.tap(find.text('94.118.188.128'));
-    await tester.pump();
-    await tester.enterText(find.byType(TextField), '8.8.8.8');
-    await tester.tap(find.byIcon(Icons.search_rounded));
-    await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('94.118.188.128'));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), '8.8.8.8');
+      await tester.tap(find.byIcon(Icons.search_rounded));
+      await pumpUntil(tester, find.text('12'));
 
-    expect(find.text('Google LLC'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
-    expect(tester.takeException(), null);
-  });
+      expect(find.text('Google LLC · AS15169'), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
+      expect(tester.takeException(), null);
+    },
+  );
 }
